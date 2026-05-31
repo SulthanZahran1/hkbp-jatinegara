@@ -20,4 +20,12 @@ Migrating from legacy PHP (Laravel + standalone) to **TypeScript (frontend) + Go
 
 ---
 
-*Under active development. Architecture decisions are being documented via the grilling process.*
+## Decisions Made
+
+- ✅ **Architecture:** TS SPA + Go JSON API
+- ✅ **DB:** Turso (libSQL/SQLite)
+- ✅ **Auth:** JWT access + refresh tokens
+- ✅ **Go framework:** Fiber
+- ✅ **Frontend:** Vue + Vite
+
+*Architecture decisions are being documented via the grilling process.*
