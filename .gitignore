@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build output
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/backend/tmp/
+
+# Uploads (local)
+/uploads/
+/frontend/public/uploads/
+
+# Go
+/backend/server
+/backend/*.exe
+/backend/*.test
+*.out
+
+# Turso
+*.db
+*.db-journal
+*.db-wal
