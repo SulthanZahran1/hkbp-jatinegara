@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+	<meta name="description" content="Laman absensi untuk Seksi Musik dan Seksi Multimedia HKBP Jatinegara.">
+    <meta name="keywords" content="seksi, musik, multimedia">
+    <meta name="author" content="HKBP Ressort Jatinegara">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <meta name="google-site-verification" content="cXJGQ4AygB9QW8iFOJVMhYc5iFVdjVjw9oJGPu_JPJU" />
+    <title>Presensi HKBP Jatinegara</title>
+    <link rel="icon" href="favicon.png" type="image/png" />
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.11.2/css/all.css" />
+    <!-- Google Fonts Roboto -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
+    />
+    <!-- MDB -->
+    <link rel="stylesheet" href="css/mdb.min.css" />
+    <!-- PRISM -->
+    <link rel="stylesheet" href="dev/css/new-prism.css" />
+    <!-- Micon -->
+    <link rel="stylesheet" href="dev/css/micon.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@icon/micon@3.0.168/micon.min.css" />
+    <!-- Custom styles -->
+    <style>
+      .shadow-demo {
+        width: 100px;
+        height: 100px;
+        background-color: #fff;
+      }
+
+      .shadow-demo-1 {
+        width: 100px;
+        height: 100px;
+        background-color: #ccc;
+      }
+
+      .shadow-demo-2 {
+        width: 100px;
+        height: 100px;
+        background-color: #000;
+      }
+
+      .mask-custom {
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 0;
+        border: 0;
+        background-clip: padding-box;
+        box-shadow: 10px 10px 10px rgba(46, 54, 68, 0.03);
+      }
+
+      .custom-1 {
+        backdrop-filter: blur(30px);
+      }
+
+      .custom-2 {
+        backdrop-filter: blur(60px);
+      }
+
+      .custom-3 {
+        backdrop-filter: blur(40px);
+      }
+
+      .custom-4 {
+        backdrop-filter: blur(15px);
+      }
+
+      .custom-5 {
+        backdrop-filter: blur(5px);
+      }
+
+      .mask-custom-1 {
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 0;
+        border: 0;
+        background-clip: padding-box;
+        box-shadow: 10px 10px 10px rgba(46, 54, 68, 0.03);
+      }
+
+      .custom-6 {
+        backdrop-filter: blur(30px);
+      }
+
+      .custom-7 {
+        backdrop-filter: blur(60px);
+      }
+
+      .custom-8 {
+        backdrop-filter: blur(40px);
+      }
+
+      .custom-9 {
+        backdrop-filter: blur(15px);
+      }
+
+      .custom-10 {
+        backdrop-filter: blur(5px);
+      }
+      .square {
+        height: 100px;
+        width: 100px;
+      }
+
+      img.fit {
+        object-fit: contain;
+        max-width: 100%;
+        max-height: 100%;
+      }
+      .shadow-demo {
+        width: 100px;
+        height: 100px;
+        background-color: #fff;
+      }
+
+      .shadow-demo-1 {
+        width: 100px;
+        height: 100px;
+        background-color: #ccc;
+      }
+
+      .shadow-demo-2 {
+        width: 100px;
+        height: 100px;
+        background-color: #000;
+      }
+
+      .mask-custom {
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 0;
+        border: 0;
+        background-clip: padding-box;
+        box-shadow: 10px 10px 10px rgba(46, 54, 68, 0.03);
+      }
+
+      .custom-1 {
+        backdrop-filter: blur(30px);
+      }
+
+      .custom-2 {
+        backdrop-filter: blur(60px);
+      }
+
+      .custom-3 {
+        backdrop-filter: blur(40px);
+      }
+
+      .custom-4 {
+        backdrop-filter: blur(15px);
+      }
+
+      .custom-5 {
+        backdrop-filter: blur(5px);
+      }
+
+      .mask-custom-1 {
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 0;
+        border: 0;
+        background-clip: padding-box;
+        box-shadow: 10px 10px 10px rgba(46, 54, 68, 0.03);
+      }
+
+      .custom-6 {
+        backdrop-filter: blur(30px);
+      }
+
+      .custom-7 {
+        backdrop-filter: blur(60px);
+      }
+
+      .custom-8 {
+        backdrop-filter: blur(40px);
+      }
+
+      .custom-9 {
+        backdrop-filter: blur(15px);
+      }
+
+      .custom-10 {
+        backdrop-filter: blur(5px);
+      }
+			@font-face {
+        font-family: "SFPro-Display";
+        src: url("fonts/sfpro.otf");
+      }
+    </style>
+  </head>
+	
+	
+
+  <body>
+	
+	  <!-- NAVIGATION BAR -->
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function(){
+// make it as accordion for smaller screens
+if (window.innerWidth < 992) {
+
+  // close all inner dropdowns when parent is closed
+  document.querySelectorAll('.navbar .dropdown').forEach(function(everydropdown){
+    everydropdown.addEventListener('hidden.bs.dropdown', function () {
+      // after dropdown is hidden, then find all submenus
+        this.querySelectorAll('.submenu').forEach(function(everysubmenu){
+          // hide every submenu as well
+          everysubmenu.style.display = 'none';
+        });
+    })
+  });
+
+  document.querySelectorAll('.dropdown-menu a').forEach(function(element){
+    element.addEventListener('click', function (e) {
+        let nextEl = this.nextElementSibling;
+        if(nextEl && nextEl.classList.contains('submenu')) {	
+          // prevent opening link if link needs to open dropdown
+          e.preventDefault();
+          if(nextEl.style.display == 'block'){
+            nextEl.style.display = 'none';
+          } else {
+            nextEl.style.display = 'block';
+          }
+
+        }
+    });
+  })
+}
+// end if innerWidth
+}); 
+// DOMContentLoaded  end
+    </script>
+		
+		    <style>
+      /* ============ desktop view ============ */
+@media all and (min-width: 992px) {
+	.dropdown-menu li{ position: relative; 	}
+	.nav-item .submenu{ 
+		display: none;
+		position: absolute;
+		left:100%; top:-7px;
+	}
+	.nav-item .submenu-left{ 
+		right:100%; left:auto;
+	}
+	.dropdown-menu > li:hover{ background-color: #f1f1f1 }
+	.dropdown-menu > li:hover > .submenu{ display: block; }
+}	
+/* ============ desktop view .end// ============ */
+
+/* ============ small devices ============ */
+@media (max-width: 991px) {
+  .dropdown-menu .dropdown-menu{
+      margin-left:0.7rem; margin-right:0.7rem; margin-bottom: .5rem;
+  }
+}	
+/* ============ small devices .end// ============ */
+
+    </style>
+  
+	<nav class="navbar navbar-expand-lg navbar-light fixed-top" style="background-image: linear-gradient(to right, #A6D4EF , #D7B4F7);">
+          <div class="container-fluid">
+            <a class="navbar-brand" href="https://hkbpjtn.web.id/" style="font-family: SFPro-Display;"><img src="logo.webp" width="50px" />&nbsp;&nbsp;&nbsp;&nbsp;HKBP Jatinegara</a>
+            <button
+              class="navbar-toggler pe-1"
+              type="button"
+              data-mdb-toggle="collapse"
+              data-mdb-target="#navbarColor03"
+              aria-controls="navbarColor03"
+              aria-expanded="false"
+              aria-label="Toggle navigation"
+            >
+              <span class="navbar-toggler-icon d-flex justify-content-end align-items-center">
+                <i class="fas fa-bars"></i>
+              </span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarColor03">
+              <ul class="navbar-nav ms-auto">
+                <li class="nav-item active">
+                  <a class="nav-link" href="https://hkbpjtn.web.id/">Beranda</a>
+                </li>
+
+                <li class="nav-item dropdown">
+                  <a
+                    class="nav-link dropdown-toggle"
+                    href="#"
+                    id="navbarDropdown1"
+                    role="button"
+                    data-mdb-toggle="dropdown"
+                    aria-expanded="false"
+                  >
+                    Koinonia
+                  </a>
+                  <ul
+                    class="dropdown-menu dropdown-menu-end ml-n4"
+                    aria-labelledby="navbarDropdown1"
+                    style="width: 250px;"
+                  >
+                    <li><a class="dropdown-item" href="https://hkbpjtn.web.id/sekolah-minggu">Seksi Sekolah Minggu</a></li>
+                    <li><a class="dropdown-item" href="https://hkbpjtn.web.id/sie-remaja">Seksi Remaja</a></li>
+                    <li><a class="dropdown-item" href="https://hkbpjtn.web.id/nhkbp">Seksi Pemuda</a></li>
+                    <li><a class="dropdown-item" href="https://hkbpjtn.web.id/seksi-ama">Seksi Ama</a></li>
+                    <li><a class="dropdown-item" href="https://hkbpjtn.web.id/sph">Seksi Ina</a></li>
+                    <li><a class="dropdown-item" href="https://hkbpjtn.web.id/seksi-lansia">Seksi Lansia</a></li>
+                  </ul>
+                </li>
+
+                <li class="nav-item dropdown">
+                  <a
+                    class="nav-link dropdown-toggle"
+                    href="#"
+                    id="navbarDropdown2"
+                    role="button"
+                    data-mdb-toggle="dropdown"
+                    aria-expanded="false"
+										style="color: black"
+                  >
+                    Marturia
+                  </a>
+                  <ul
+                    class="dropdown-menu"
+                    aria-labelledby="navbarDropdown2"
+                    style="width: 250px;"
+                  >
+                    <li><a class="dropdown-item" href="#"> Seksi Musik &raquo; </a>
+                      <ul class="submenu dropdown-menu">
+                        <li><a class="dropdown-item" href="https://absen.hkbpjtn.web.id/musik">Presensi Pelayan</a></li>
+                      </ul>
+                    </li>
+
+                    <li><a class="dropdown-item" href="#"> Seksi Multimedia &raquo; </a>
+                      <ul class="submenu dropdown-menu">
+                        <li><a class="dropdown-item" href="https://absen.hkbpjtn.web.id/multimedia">Presensi Pelayan</a></li>
+                        <li><a class="dropdown-item" href="https://hkbpjtn.web.id/template">Template</a></li>
+                      </ul>
+                    </li>
+
+                    <li><a class="dropdown-item" href="#">Seksi Zending</a></li>
+                  </ul>
+                </li>
+
+                <li class="nav-item dropdown">
+                  <a
+                    class="nav-link dropdown-toggle"
+                    href="#"
+                    id="navbarDropdown1"
+                    role="button"
+                    data-mdb-toggle="dropdown"
+                    aria-expanded="false"
+                  >
+                    Diakonia
+                  </a>
+                  <ul
+                    class="dropdown-menu dropdown-menu-end ml-n4"
+                    aria-labelledby="navbarDropdown1"
+                    style="width: 250px;"
+                  >
+                    <li><a class="dropdown-item" href="#">Seksi Kesehatan</a></li>
+                    <li><a class="dropdown-item" href="#">Seksi Pendidikan</a></li>
+                  </ul>
+                </li>
+                
+                <li class="nav-item dropdown">
+                  <a
+                    class="nav-link dropdown-toggle"
+                    href="#"
+                    id="navbarDropdown1"
+                    role="button"
+                    data-mdb-toggle="dropdown"
+                    aria-expanded="false"
+                  >
+                    Artikel
+                  </a>
+                  <ul
+                    class="dropdown-menu dropdown-menu-end ml-n4"
+                    aria-labelledby="navbarDropdown1"
+                    style="width: 250px;"
+                  >
+                    <li><a class="dropdown-item" href="https://hkbpjtn.web.id/renungan-harian">Renungan Harian</a></li>
+                    <li><a class="dropdown-item" href="https://hkbpjtn.web.id/berita">Berita</a></li>
+                  </ul>
+                </li>
+
+                <li class="nav-item dropdown active">
+                  <a
+                    class="nav-link dropdown-toggle"
+                    href="#"
+                    id="navbarDropdown1"
+                    role="button"
+                    data-mdb-toggle="dropdown"
+                    aria-expanded="false"
+                  >
+                    Media
+                  </a>
+                  <ul
+                    class="dropdown-menu dropdown-menu-end ml-n4"
+                    aria-labelledby="navbarDropdown1"
+                    style="width: 250px;"
+                  >
+                    <li><a class="dropdown-item" href="https://gallery.hkbpjtn.web.id/"><strong>Galeri Foto</strong></a></li>
+                    <li><a class="dropdown-item" href="https://hkbpjtn.web.id/tv">JTN TV</a></li>
+                  </ul>
+                </li>
+
+                <li class="nav-item">
+                  <a class="nav-link" href="https://hkbpjtn.web.id/tentang-kami">Tentang Kami</a>
+                </li>
+
+              </ul>
+              </ul>
+
+              <!-- form class="d-flex">
+                <input
+                  class="form-control me-2"
+                  type="search"
+                  placeholder="Search"
+                  aria-label="Search"
+                />
+                <button class="btn btn-outline-primary" type="submit">Search</button>
+              </form -->
+            </div>
+          </div>
+        </nav>
+  
+    <div class="bg-image" style="height: 100vh;">
+      <video autoplay muted loop>
+        <source src="bg.mp4" type="video/mp4" />
+      </video>
+      <div class="mask text-white" style="background-color: rgba(0, 0, 0, 0.6);">
+        <div class="container d-flex align-items-center text-center h-100">
+
+          <div class="container my-5">
+            <div class="text-center">
+              <h1><img src="logo-white.png" alt="HKBP Jatinegara" width="200"/></h1>
+              <h1><strong>Presensi Kehadiran Petugas</strong></h1>
+              <h4>Seksi Musik & Seksi Multimedia</h4>
+              <p>Silakan pilih halaman presensi yang dituju:</p>
+            </div>
+
+            <section class="text-center">
+               <a role="button" href="/musik" data-ripple-color="light" type="button" class="btn btn-lg btn-danger btn-rounded shadow-4" style="margin-right: 10px;">Seksi Musik</a>
+               <a role="button" href="/multimedia" data-ripple-color="light" type="button" class="btn btn-lg btn-primary btn-rounded shadow-4">Seksi Multimedia</a>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JQUERY -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.js"></script>
+    <!-- MDB -->
+    <script type="text/javascript" src="js/mdb.min.js"></script>
+    <!-- PRISM -->
+    <script type="text/javascript" src="dev/js/new-prism.js"></script>
+    <!-- MDB SNIPPET -->
+    <script type="text/javascript" src="dev/js/dist/mdbsnippet.min.js"></script>
+    <!-- Custom scripts -->
+    <script type="text/javascript">
+      document
+        .querySelectorAll('.card-img-top')
+        .forEach((cardImage) => new mdb.Ripple(cardImage, { color: 'light' }));
+
+      $('.card-img-left').ripple({ color: 'light' });
+    </script>
+  </body>
+</html>
