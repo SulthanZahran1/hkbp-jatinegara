@@ -26,6 +26,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	"golang.org/x/crypto/bcrypt"
+	_ "modernc.org/sqlite"
 )
 
 const bcryptCost = 12
@@ -205,8 +206,22 @@ func loadConfig() Config {
 	tursoURL := env("TURSO_URL", env("TURSO_DATABASE_URL", "http://127.0.0.1:8081"))
 	tursoToken := env("TURSO_AUTH_TOKEN", "")
 
+	driver := "libsql"
 	dsn := tursoURL
-	if tursoToken != "" && !strings.Contains(tursoToken, "<") {
+	if sqlitePath := env("SQLITE_PATH", ""); sqlitePath != "" {
+		driver = "sqlite"
+		dsn = sqlitePath
+	} else if strings.HasPrefix(tursoURL, "file:") || strings.HasSuffix(tursoURL, ".db") {
+		driver = "sqlite"
+		dsn = tursoURL
+	}
+	if driver == "sqlite" {
+		sep := "?"
+		if strings.Contains(dsn, "?") {
+			sep = "&"
+		}
+		dsn = dsn + sep + "_pragma=foreign_keys(1)"
+	} else if tursoToken != "" && !strings.Contains(tursoToken, "<") {
 		sep := "?"
 		if strings.Contains(tursoURL, "?") {
 			sep = "&"
@@ -216,7 +231,7 @@ func loadConfig() Config {
 
 	return Config{
 		Port:          port,
-		Driver:        "libsql",
+		Driver:        driver,
 		DSN:           dsn,
 		JWTSecret:     env("JWT_SECRET", "dev-secret-change-before-production"),
 		AccessExpiry:  secondsEnv("JWT_ACCESS_EXPIRY", 900),

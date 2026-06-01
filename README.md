@@ -113,11 +113,12 @@ docker run --rm -p 8080:8080 \
   hkbp-jatinegara
 ```
 
-For Dokploy, configure the app service as Dockerfile build type and set at least:
+For Dokploy, configure the app service as Dockerfile build type and set at least. `SQLITE_PATH` is the simplest single-container option; for managed Turso/libSQL, omit `SQLITE_PATH` and set `TURSO_URL` / `TURSO_AUTH_TOKEN` instead.
 
 ```env
 PORT=8080
-TURSO_URL=http://<libsql-service>:8080
+SQLITE_PATH=/app/data/hkbp-jatinegara.db
+TURSO_URL=
 TURSO_AUTH_TOKEN=
 JWT_SECRET=<random-secret>
 CORS_ORIGIN=https://hkbp.zahranm.cloud

@@ -26,9 +26,8 @@ RUN apt-get update \
 COPY --from=backend-build /out/hkbp-server /app/hkbp-server
 COPY backend/migrations /app/migrations
 COPY --from=frontend-build /src/frontend/dist /app/frontend/dist
-RUN mkdir -p /app/uploads \
+RUN mkdir -p /app/uploads /app/data \
     && chown -R appuser:appuser /app
-USER appuser
 ENV PORT=8080 \
     STATIC_DIR=/app/frontend/dist \
     UPLOAD_DIR=/app/uploads \
