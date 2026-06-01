@@ -10,7 +10,7 @@ Modernizing HKBP Jatinegara's church administration from a legacy PHP stack to a
 | Backend | Go + Fiber v2 |
 | Database | Self-hosted Turso-compatible libSQL server |
 | Auth | JWT (access + refresh tokens) |
-| HTTP Client | Axios (Vue) |
+| Deployment | Dockerfile app image for Dokploy; `docker-compose.yml` for local libSQL |
 
 ## Decisions Made
 
@@ -99,6 +99,30 @@ go run cmd/server/main.go
 cd frontend
 pnpm install
 pnpm dev
+```
+
+### Production Docker image
+
+The root `Dockerfile` builds the Vue SPA with `VITE_API_BASE_URL=/api/v1`, builds the Go API, and serves both from one container on port `8080`.
+
+```bash
+docker build -t hkbp-jatinegara .
+docker run --rm -p 8080:8080 \
+  -e TURSO_URL=http://host.docker.internal:8081 \
+  -e JWT_SECRET=change-me \
+  hkbp-jatinegara
+```
+
+For Dokploy, configure the app service as Dockerfile build type and set at least:
+
+```env
+PORT=8080
+TURSO_URL=http://<libsql-service>:8080
+TURSO_AUTH_TOKEN=
+JWT_SECRET=<random-secret>
+CORS_ORIGIN=https://hkbp.zahranm.cloud
+STATIC_DIR=/app/frontend/dist
+UPLOAD_DIR=/app/uploads
 ```
 
 ## Legacy Reference

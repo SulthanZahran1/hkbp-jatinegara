@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+**/.env
+**/.env.*
+!**/.env.example
+frontend/node_modules
+frontend/dist
+backend/hkbp_jatinegara.db
+backend/uploads/*
+!backend/uploads/.gitkeep
+legacy
+_repo_probe

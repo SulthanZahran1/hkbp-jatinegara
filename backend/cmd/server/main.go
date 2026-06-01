@@ -39,6 +39,7 @@ type Config struct {
 	RefreshExpiry time.Duration
 	CORSOrigin    string
 	UploadDir     string
+	StaticDir     string
 	MaxUploadSize int64
 }
 
@@ -222,6 +223,7 @@ func loadConfig() Config {
 		RefreshExpiry: secondsEnv("JWT_REFRESH_EXPIRY", 604800),
 		CORSOrigin:    env("CORS_ORIGIN", "http://localhost:5173"),
 		UploadDir:     env("UPLOAD_DIR", "./uploads"),
+		StaticDir:     env("STATIC_DIR", ""),
 		MaxUploadSize: int64Env("MAX_UPLOAD_SIZE", 5242880),
 	}
 }
@@ -412,6 +414,27 @@ func (s *Server) registerRoutes(app *fiber.App) {
 
 	protected.Get("/attendance", s.listAttendance)
 	protected.Post("/attendance", s.recordAttendance)
+
+	registerStaticRoutes(app, s.cfg.StaticDir)
+}
+
+func registerStaticRoutes(app *fiber.App, staticDir string) {
+	if strings.TrimSpace(staticDir) == "" {
+		return
+	}
+	indexPath := filepath.Join(staticDir, "index.html")
+	if _, err := os.Stat(indexPath); err != nil {
+		log.Printf("static frontend disabled: %s not readable: %v", indexPath, err)
+		return
+	}
+
+	app.Static("/", staticDir)
+	app.Get("*", func(c *fiber.Ctx) error {
+		if strings.HasPrefix(c.Path(), "/api/") {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "not found"})
+		}
+		return c.SendFile(indexPath)
+	})
 }
 
 func (s *Server) login(c *fiber.Ctx) error {
