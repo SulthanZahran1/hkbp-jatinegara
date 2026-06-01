@@ -24,7 +24,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
-	_ "github.com/mattn/go-sqlite3"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -202,14 +201,11 @@ func loadConfig() Config {
 	_ = godotenv.Load()
 
 	port := env("PORT", "8080")
-	dbPath := env("DB_PATH", "./hkbp_jatinegara.db")
-	tursoURL := env("TURSO_URL", env("TURSO_DATABASE_URL", ""))
+	tursoURL := env("TURSO_URL", env("TURSO_DATABASE_URL", "http://127.0.0.1:8081"))
 	tursoToken := env("TURSO_AUTH_TOKEN", "")
 
-	driver := "sqlite3"
-	dsn := dbPath
-	if tursoURL != "" && tursoToken != "" && !strings.Contains(tursoURL, "<") && !strings.Contains(tursoToken, "<") {
-		driver = "libsql"
+	dsn := tursoURL
+	if tursoToken != "" && !strings.Contains(tursoToken, "<") {
 		sep := "?"
 		if strings.Contains(tursoURL, "?") {
 			sep = "&"
@@ -219,7 +215,7 @@ func loadConfig() Config {
 
 	return Config{
 		Port:          port,
-		Driver:        driver,
+		Driver:        "libsql",
 		DSN:           dsn,
 		JWTSecret:     env("JWT_SECRET", "dev-secret-change-before-production"),
 		AccessExpiry:  secondsEnv("JWT_ACCESS_EXPIRY", 900),
@@ -231,15 +227,6 @@ func loadConfig() Config {
 }
 
 func openDB(cfg Config) (*sql.DB, error) {
-	if cfg.Driver == "sqlite3" {
-		dir := filepath.Dir(cfg.DSN)
-		if dir != "." && dir != "" {
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				return nil, err
-			}
-		}
-	}
-
 	db, err := sql.Open(cfg.Driver, cfg.DSN)
 	if err != nil {
 		return nil, err
@@ -252,12 +239,6 @@ func openDB(cfg Config) (*sql.DB, error) {
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, err
-	}
-	if cfg.Driver == "sqlite3" {
-		if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-			_ = db.Close()
-			return nil, err
-		}
 	}
 	return db, nil
 }

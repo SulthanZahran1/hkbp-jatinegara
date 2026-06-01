@@ -1,7 +1,7 @@
 # ADR 0001: Use Turso as the Primary Database
 
 ## Status
-Accepted
+Accepted, amended by [ADR 0003](0003-self-host-libsql.md)
 
 ## Context
 HKBP Jatinegara is being migrated from a legacy PHP/Laravel thin client plus external backend API into a TypeScript SPA and Go JSON API.
@@ -11,7 +11,9 @@ Expected concurrency is very small: fewer than 10 active users. The system store
 The legacy backend API (`dbruas-be.hkbpjtn.web.id`) is currently unreachable, and its database schema is not available. The new schema is being designed from the legacy UI/domain forms rather than copied from production.
 
 ## Decision
-Use **Turso** (libSQL/SQLite-compatible) as the primary production database.
+Use **Turso/libSQL-compatible database technology** as the primary database family.
+
+ADR 0003 changes the default runtime from managed Turso Cloud to a self-hosted libSQL server, while preserving Turso/libSQL SDK compatibility.
 
 ## Consequences
 

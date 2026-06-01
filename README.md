@@ -8,14 +8,14 @@ Modernizing HKBP Jatinegara's church administration from a legacy PHP stack to a
 |---|---|
 | Frontend | Vue 3 + Vite + TypeScript |
 | Backend | Go + Fiber v2 |
-| Database | Turso (libSQL/SQLite) |
+| Database | Self-hosted Turso-compatible libSQL server |
 | Auth | JWT (access + refresh tokens) |
 | HTTP Client | Axios (Vue) |
 
 ## Decisions Made
 
 - ✅ **Architecture:** Vue SPA + Go JSON API (Fiber)
-- ✅ **DB:** Turso (libSQL/SQLite)
+- ✅ **DB:** Self-hosted libSQL server, compatible with Turso SDKs
 - ✅ **Auth:** JWT access + refresh tokens
 - ✅ **Frontend:** Vue 3 + Vite + TypeScript
 - ✅ **Schema:** Clean design from legacy UI
@@ -76,13 +76,20 @@ hkbp-jatinegara/
 - Go 1.22+
 - Node.js 20+
 - pnpm (or npm)
-- Turso CLI (for local dev)
+- Docker + Docker Compose
+
+### Database
+```bash
+docker compose up -d turso
+```
+
+The self-hosted libSQL server listens on `http://127.0.0.1:8081` and stores data in the `turso-data` Docker volume.
 
 ### Backend
 ```bash
 cd backend
 cp .env.example .env
-# Edit .env with Turso database URL and JWT secret
+# Keep TURSO_URL=http://127.0.0.1:8081 for self-hosted libSQL, then set JWT_SECRET
 go mod tidy
 go run cmd/server/main.go
 ```

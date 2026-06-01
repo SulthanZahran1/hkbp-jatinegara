@@ -31,7 +31,7 @@ codex --search --sandbox workspace-write
 Then paste this in the interactive Codex composer:
 
 ```text
-/goal Build the complete HKBP Jatinegara migration MVP described in this repository. Read AGENTS.md, README.md, CONTEXT.md, docs/build-guide.md, docs/database-schema.md, docs/api-spec.md, and docs/adr/*.md before editing. Implement a runnable Go Fiber backend in backend/ and a Vue 3 + Vite + TypeScript frontend in frontend/. Use Turso/libSQL with local SQLite fallback if Turso credentials are unavailable. Implement JWT access+refresh auth, migrations, default admin seeding, CRUD/list endpoints for sectors, roles, users, families with nested members, members, offerings/report, sintua, and attendance, plus the corresponding Vue views, auth store, router guard, API client, and forms. Verify with go test ./..., backend startup or health endpoint, and pnpm build. Stop only when the app is runnable and verified, or when a hard blocker remains; if blocked, report the exact blocker, attempted paths, and what input is needed.
+/goal Build the complete HKBP Jatinegara migration MVP described in this repository. Read AGENTS.md, README.md, CONTEXT.md, docs/build-guide.md, docs/database-schema.md, docs/api-spec.md, and docs/adr/*.md before editing. Implement a runnable Go Fiber backend in backend/ and a Vue 3 + Vite + TypeScript frontend in frontend/. Use the self-hosted Turso-compatible libSQL server from docker-compose.yml as the default database runtime. Implement JWT access+refresh auth, migrations, default admin seeding, CRUD/list endpoints for sectors, roles, users, families with nested members, members, offerings/report, sintua, and attendance, plus the corresponding Vue views, auth store, router guard, API client, and forms. Verify with docker compose up -d turso, go test ./..., backend startup or health endpoint, and pnpm build. Stop only when the app is runnable and verified, or when a hard blocker remains; if blocked, report the exact blocker, attempted paths, and what input is needed.
 ```
 
 ## Goal lifecycle cheatsheet
@@ -55,7 +55,13 @@ Codex should stop only when:
 
 ## Expected manual setup after build
 
-If Turso credentials are not available during implementation, the app should still run against local SQLite/libSQL. Later production setup will need:
+The app now defaults to a self-hosted Turso-compatible libSQL server. Start it with:
+
+```bash
+docker compose up -d turso
+```
+
+Later managed Turso Cloud setup can still use:
 
 ```env
 TURSO_URL=libsql://...

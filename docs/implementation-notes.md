@@ -2,15 +2,23 @@
 
 ## Verified local runtime
 
-The MVP runs against local SQLite when `TURSO_URL` and `TURSO_AUTH_TOKEN` are not configured. Set `DB_PATH` to change the local database path.
+The MVP runs against a self-hosted Turso-compatible libSQL server by default.
 
-Production Turso setup still needs:
+Start the database with:
+
+```bash
+docker compose up -d turso
+```
+
+Then run the backend with:
 
 ```env
-TURSO_URL=libsql://...
-TURSO_AUTH_TOKEN=...
+TURSO_URL=http://127.0.0.1:8081
+TURSO_AUTH_TOKEN=
 JWT_SECRET=...
 ```
+
+Managed Turso Cloud can still use `libsql://...` plus `TURSO_AUTH_TOKEN`.
 
 ## Implementation deviations
 

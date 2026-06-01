@@ -4,7 +4,7 @@
 Modernizing HKBP Jatinegara's church administration from a legacy PHP stack (Laravel thin client + separate backend API) to **TypeScript (Vue SPA frontend) + Go (Fiber API backend)**.
 
 ## Database
-**Turso** (libSQL/SQLite-based edge database). Chosen for simplicity, zero operations overhead, and adequate performance for <10 concurrent users.
+**Self-hosted libSQL server** using Turso-compatible drivers. Chosen to keep the database self-hosted while preserving the Turso/libSQL API surface and adequate performance for <10 concurrent users.
 
 ## Authentication
 **JWT** with access tokens (short-lived) and refresh tokens (long-lived). Chosen to support both the SPA and any future mobile/native clients from a single auth system.
@@ -13,7 +13,7 @@ Modernizing HKBP Jatinegara's church administration from a legacy PHP stack (Lar
 
 - **Vue SPA** — browser client, communicates with Go backend via JSON API
 - **Go API (Fiber)** — single backend serving all business logic and data access
-- **Database** — Turso (libSQL)
+- **Database** — self-hosted libSQL server using Turso-compatible drivers
 
 ## Domain Concepts
 

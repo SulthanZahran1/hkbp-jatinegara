@@ -1,0 +1,17 @@
+services:
+  turso:
+    image: ghcr.io/tursodatabase/libsql-server:latest
+    platform: linux/amd64
+    environment:
+      SQLD_NODE: primary
+      SQLD_DB_PATH: /var/lib/sqld/hkbp-jatinegara.db
+      SQLD_HTTP_LISTEN_ADDR: 0.0.0.0:8080
+      SQLD_GRPC_LISTEN_ADDR: 0.0.0.0:5001
+    ports:
+      - "8081:8080"
+      - "5002:5001"
+    volumes:
+      - turso-data:/var/lib/sqld
+
+volumes:
+  turso-data:

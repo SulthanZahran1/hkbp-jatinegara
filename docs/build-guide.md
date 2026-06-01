@@ -18,7 +18,6 @@ go get github.com/gofiber/fiber/v2
 go get github.com/gofiber/jwt/v2
 go get github.com/golang-jwt/jwt/v5
 go get github.com/tursodatabase/libsql-client-go
-go get github.com/mattn/go-sqlite3  # for local dev
 go get golang.org/x/crypto/bcrypt
 go get github.com/joho/godotenv
 ```
@@ -261,17 +260,20 @@ export const deleteSector = (id: number) => client.delete(`/sectors/${id}`);
 ## Phase 3: Integration
 
 ### 3.1 Environment setup
-1. Create Turso database: `turso db create hkbp-jatinegara`
-2. Copy backend `.env.example` → `.env`, fill in values
+1. Start the self-hosted libSQL server: `docker compose up -d turso`
+2. Copy backend `.env.example` → `.env`, keep `TURSO_URL=http://127.0.0.1:8081`, and set `JWT_SECRET`
 3. Copy frontend `.env.example` → `.env`
-4. Run migrations against Turso: `turso db shell hkbp-jatinegara < migrations/001_*.sql` (etc.)
+4. Start the backend. Its migration runner applies `backend/migrations/*.sql` to the self-hosted libSQL server.
 
 ### 3.2 Run locally
 ```bash
-# Terminal 1 — Backend
+# Terminal 1 — Database
+docker compose up -d turso
+
+# Terminal 2 — Backend
 cd backend && go run cmd/server/main.go
 
-# Terminal 2 — Frontend
+# Terminal 3 — Frontend
 cd frontend && pnpm dev
 ```
 
