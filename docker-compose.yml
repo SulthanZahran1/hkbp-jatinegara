@@ -1,4 +1,28 @@
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+    container_name: hkbp-app
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      SQLITE_PATH: /app/data/hkbp_jatinegara.db
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: https://hkbp.zahranm.cloud
+      STATIC_DIR: /app/frontend/dist
+      UPLOAD_DIR: /app/uploads
+      MAX_UPLOAD_SIZE: 5242880
+    volumes:
+      - app-data:/app/data
+      - app-uploads:/app/uploads
+    networks:
+      - web
+    expose:
+      - "8080"
+
   turso:
     image: ghcr.io/tursodatabase/libsql-server:latest
     platform: linux/amd64
@@ -14,4 +38,10 @@ services:
       - turso-data:/var/lib/sqld
 
 volumes:
+  app-data:
+  app-uploads:
   turso-data:
+
+networks:
+  web:
+    external: true
