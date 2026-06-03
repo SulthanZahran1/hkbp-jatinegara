@@ -1,0 +1,1190 @@
+openapi: 3.0.3
+info:
+  title: HKBP Jatinegara API
+  version: "1.0"
+  description: Church membership management API for HKBP Jatinegara congregation.
+
+servers:
+  - url: /api/v1
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        nama_depan:
+          type: string
+        nama_belakang:
+          type: string
+          nullable: true
+        role_id:
+          type: integer
+        role_name:
+          type: string
+        sektor_id:
+          type: integer
+          nullable: true
+        sector_name:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+        last_access:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+
+    Sector:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        created_at:
+          type: string
+
+    Member:
+      type: object
+      properties:
+        id:
+          type: integer
+        family_id:
+          type: integer
+        sector_id:
+          type: integer
+        sector_name:
+          type: string
+        nama:
+          type: string
+        marga:
+          type: string
+          nullable: true
+        gender:
+          type: string
+          enum: [Laki-laki, Perempuan]
+        tempat_lahir:
+          type: string
+          nullable: true
+        tanggal_lahir:
+          type: string
+          nullable: true
+        gol_darah:
+          type: string
+          nullable: true
+        hubungan_keluarga:
+          type: string
+        pendidikan:
+          type: string
+          nullable: true
+        pekerjaan:
+          type: string
+          nullable: true
+        talenta:
+          type: string
+          nullable: true
+        no_hp:
+          type: string
+          nullable: true
+        alamat:
+          type: string
+          nullable: true
+        provinsi:
+          type: string
+          nullable: true
+        kota:
+          type: string
+          nullable: true
+        kecamatan:
+          type: string
+          nullable: true
+        kelurahan:
+          type: string
+          nullable: true
+        kode_pos:
+          type: string
+          nullable: true
+        foto_url:
+          type: string
+          nullable: true
+        tgl_baptis:
+          type: string
+          nullable: true
+        gereja_baptis:
+          type: string
+          nullable: true
+        pendeta_baptis:
+          type: string
+          nullable: true
+        tgl_sidi:
+          type: string
+          nullable: true
+        gereja_sidi:
+          type: string
+          nullable: true
+        pendeta_sidi:
+          type: string
+          nullable: true
+        nats_sidi:
+          type: string
+          nullable: true
+        tgl_perkawinan:
+          type: string
+          nullable: true
+        gereja_perkawinan:
+          type: string
+          nullable: true
+        pendeta_perkawinan:
+          type: string
+          nullable: true
+        nats_perkawinan:
+          type: string
+          nullable: true
+        is_head_of_family:
+          type: boolean
+        created_at:
+          type: string
+
+    MemberInput:
+      type: object
+      required: [nama, gender, hubungan_keluarga]
+      properties:
+        nama:
+          type: string
+        marga:
+          type: string
+        gender:
+          type: string
+          enum: [Laki-laki, Perempuan]
+        tempat_lahir:
+          type: string
+        tanggal_lahir:
+          type: string
+          format: date
+        gol_darah:
+          type: string
+        hubungan_keluarga:
+          type: string
+        pendidikan:
+          type: string
+        pekerjaan:
+          type: string
+        talenta:
+          type: string
+        no_hp:
+          type: string
+        alamat:
+          type: string
+        provinsi:
+          type: string
+        kota:
+          type: string
+        kecamatan:
+          type: string
+        kelurahan:
+          type: string
+        kode_pos:
+          type: string
+        tgl_baptis:
+          type: string
+          format: date
+        gereja_baptis:
+          type: string
+        pendeta_baptis:
+          type: string
+        tgl_sidi:
+          type: string
+          format: date
+        gereja_sidi:
+          type: string
+        pendeta_sidi:
+          type: string
+        nats_sidi:
+          type: string
+        tgl_perkawinan:
+          type: string
+          format: date
+        gereja_perkawinan:
+          type: string
+        pendeta_perkawinan:
+          type: string
+        nats_perkawinan:
+          type: string
+        is_head_of_family:
+          type: boolean
+
+    Family:
+      type: object
+      properties:
+        id:
+          type: integer
+        sector_id:
+          type: integer
+        sector_name:
+          type: string
+        head_member_id:
+          type: integer
+          nullable: true
+        head_member_name:
+          type: string
+          nullable: true
+        alamat:
+          type: string
+          nullable: true
+        member_count:
+          type: integer
+        created_at:
+          type: string
+
+    FamilyDetail:
+      allOf:
+        - $ref: '#/components/schemas/Family'
+        - type: object
+          properties:
+            members:
+              type: array
+              items:
+                $ref: '#/components/schemas/Member'
+
+    Offering:
+      type: object
+      properties:
+        id:
+          type: integer
+        family_id:
+          type: integer
+        sector_id:
+          type: integer
+        sector_name:
+          type: string
+        family_head_name:
+          type: string
+          nullable: true
+        amount:
+          type: integer
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+        created_by:
+          type: integer
+        created_at:
+          type: string
+
+    Sintua:
+      type: object
+      properties:
+        id:
+          type: integer
+        member_id:
+          type: integer
+        member_name:
+          type: string
+        sektor_id:
+          type: integer
+        sektor_name:
+          type: string
+        sector_id:
+          type: integer
+        sector_name:
+          type: string
+        created_at:
+          type: string
+
+    Attendance:
+      type: object
+      properties:
+        id:
+          type: integer
+        member_id:
+          type: integer
+        member_name:
+          type: string
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+        seksi:
+          type: string
+        created_by:
+          type: integer
+        created_at:
+          type: string
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Tokens and user info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+                  expires_in:
+                    type: integer
+                  user:
+                    $ref: '#/components/schemas/User'
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: New access token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  expires_in:
+                    type: integer
+        "401":
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List all roles
+      responses:
+        "200":
+          description: Role list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+
+  /sectors:
+    get:
+      tags: [Sectors]
+      summary: List all sectors
+      responses:
+        "200":
+          description: Sector list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Sector'
+    post:
+      tags: [Sectors]
+      summary: Create sector (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+        "400":
+          description: Validation error
+
+  /sectors/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags: [Sectors]
+      summary: Update sector (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+        "404":
+          description: Not found
+    delete:
+      tags: [Sectors]
+      summary: Delete sector (admin)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users (admin)
+      parameters:
+        - name: sektor_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+    post:
+      tags: [Users]
+      summary: Create user (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password, nama_depan, role_id]
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                nama_depan:
+                  type: string
+                nama_belakang:
+                  type: string
+                role_id:
+                  type: integer
+                sektor_id:
+                  type: integer
+                  nullable: true
+                status:
+                  type: string
+                  enum: [active, inactive]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+
+  /users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags: [Users]
+      summary: Update user (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, nama_depan, role_id]
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                nama_depan:
+                  type: string
+                nama_belakang:
+                  type: string
+                role_id:
+                  type: integer
+                sektor_id:
+                  type: integer
+                  nullable: true
+                status:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+        "404":
+          description: Not found
+    delete:
+      tags: [Users]
+      summary: Deactivate user (admin)
+      responses:
+        "204":
+          description: Deactivated
+        "404":
+          description: Not found
+
+  /users/{id}/password:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags: [Users]
+      summary: Change password (admin or own account)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                password:
+                  type: string
+                  description: Current password (required when not admin)
+                new_password:
+                  type: string
+      responses:
+        "200":
+          description: Password changed
+        "401":
+          description: Wrong current password
+
+  /families:
+    get:
+      tags: [Families]
+      summary: List families
+      parameters:
+        - name: sektor_id
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated family list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Family'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Families]
+      summary: Create family with members
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sector_id, members]
+              properties:
+                sector_id:
+                  type: integer
+                alamat:
+                  type: string
+                members:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/MemberInput'
+                  description: Must contain exactly one member with hubungan_keluarga = "Kepala Keluarga"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  head_member_id:
+                    type: integer
+
+  /families/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [Families]
+      summary: Get family with members
+      responses:
+        "200":
+          description: Family detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyDetail'
+        "404":
+          description: Not found
+    put:
+      tags: [Families]
+      summary: Update family sector/address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sector_id]
+              properties:
+                sector_id:
+                  type: integer
+                alamat:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+        "404":
+          description: Not found
+    delete:
+      tags: [Families]
+      summary: Delete family and all members (admin)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /members:
+    get:
+      tags: [Members]
+      summary: List members
+      parameters:
+        - name: sektor_id
+          in: query
+          schema:
+            type: integer
+        - name: family_id
+          in: query
+          schema:
+            type: integer
+        - name: hubungan
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated member list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Member'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /members/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [Members]
+      summary: Get member by ID
+      responses:
+        "200":
+          description: Member detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+        "404":
+          description: Not found
+    put:
+      tags: [Members]
+      summary: Update member data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberInput'
+      responses:
+        "200":
+          description: Updated
+        "404":
+          description: Not found
+    delete:
+      tags: [Members]
+      summary: Remove member (cannot remove Kepala Keluarga)
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: Cannot delete head of family
+        "404":
+          description: Not found
+
+  /members/{id}/foto:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags: [Members]
+      summary: Upload member photo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                foto:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Photo uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  foto_url:
+                    type: string
+
+  /offerings:
+    get:
+      tags: [Offerings]
+      summary: List offerings
+      parameters:
+        - name: sektor_id
+          in: query
+          schema:
+            type: integer
+        - name: family_id
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated offering list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Offering'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Offerings]
+      summary: Record offering
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [family_id, amount, month, year]
+              properties:
+                family_id:
+                  type: integer
+                amount:
+                  type: integer
+                month:
+                  type: integer
+                  minimum: 1
+                  maximum: 12
+                year:
+                  type: integer
+                notes:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+
+  /offerings/report:
+    get:
+      tags: [Offerings]
+      summary: Monthly offering report with sector totals
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: sektor_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  by_sector:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sektor_id:
+                          type: integer
+                        sektor_name:
+                          type: string
+                        total:
+                          type: integer
+                        family_count:
+                          type: integer
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Offering'
+
+  /offerings/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    delete:
+      tags: [Offerings]
+      summary: Delete offering (admin)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /sintua:
+    get:
+      tags: [Sintua]
+      summary: List elders
+      parameters:
+        - name: sektor_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Elder list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Sintua'
+    post:
+      tags: [Sintua]
+      summary: Assign elder status to a member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [member_id]
+              properties:
+                member_id:
+                  type: integer
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+
+  /sintua/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    delete:
+      tags: [Sintua]
+      summary: Remove elder status
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /attendance:
+    get:
+      tags: [Attendance]
+      summary: List attendance records
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: seksi
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attendance'
+    post:
+      tags: [Attendance]
+      summary: Record attendance (upserts on member+date+seksi)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [member_id, date, status, seksi]
+              properties:
+                member_id:
+                  type: integer
+                date:
+                  type: string
+                  format: date
+                status:
+                  type: string
+                seksi:
+                  type: string
+      responses:
+        "201":
+          description: Created/Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer

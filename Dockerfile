@@ -25,6 +25,7 @@ RUN apt-get update \
     && useradd --system --create-home --home-dir /app appuser
 COPY --from=backend-build /out/hkbp-server /app/hkbp-server
 COPY backend/migrations /app/migrations
+COPY docs/ /app/docs/
 COPY --from=frontend-build /src/frontend/dist /app/frontend/dist
 RUN mkdir -p /app/uploads /app/data \
     && chown -R appuser:appuser /app

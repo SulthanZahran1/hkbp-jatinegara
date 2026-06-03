@@ -381,9 +381,42 @@ func seedAdmin(db *sql.DB) error {
 	return err
 }
 
+const swaggerUI = `<!DOCTYPE html>
+<html>
+<head>
+  <title>HKBP Jatinegara API</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css">
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
+<script>
+SwaggerUIBundle({
+  url: "/docs/openapi.yaml",
+  dom_id: '#swagger-ui',
+  presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+  layout: "BaseLayout",
+  deepLinking: true,
+  persistAuthorization: true,
+})
+</script>
+</body>
+</html>`
+
 func (s *Server) registerRoutes(app *fiber.App) {
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
+	})
+
+	app.Get("/docs", func(c *fiber.Ctx) error {
+		c.Set("Content-Type", "text/html; charset=utf-8")
+		return c.SendString(swaggerUI)
+	})
+	app.Get("/docs/openapi.yaml", func(c *fiber.Ctx) error {
+		c.Set("Content-Type", "application/x-yaml")
+		return c.SendFile("docs/openapi.yaml")
 	})
 
 	api := app.Group("/api/v1")
