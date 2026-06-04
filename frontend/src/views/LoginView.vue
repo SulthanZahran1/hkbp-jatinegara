@@ -1,43 +1,27 @@
 <template>
   <main class="login-page">
-    <form class="login-panel grid" @submit.prevent="submit">
+    <div class="login-panel grid">
       <div>
         <h1>HKBP Jatinegara</h1>
-        <p>Masuk ke sistem administrasi jemaat.</p>
+        <p>Administrasi Jemaat</p>
       </div>
+      <p v-if="loggedOut" class="notice">Anda telah keluar.</p>
       <p v-if="error" class="error">{{ error }}</p>
-      <FormField label="Username">
-        <input v-model="form.username" autocomplete="username" required />
-      </FormField>
-      <FormField label="Password">
-        <input v-model="form.password" autocomplete="current-password" type="password" required />
-      </FormField>
-      <button class="button" type="submit" :disabled="auth.loading">
-        {{ auth.loading ? 'Memproses...' : 'Masuk' }}
+      <button class="button" type="button" :disabled="auth.loading" @click="auth.login()">
+        Masuk dengan Akun HKBP
       </button>
-    </form>
+      <p class="hint">Anda akan diarahkan ke halaman masuk yang aman.</p>
+    </div>
   </main>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import FormField from '@/components/FormField.vue';
+import { computed } from 'vue';
+import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
-const router = useRouter();
 const route = useRoute();
-const error = ref('');
-const form = reactive({ username: 'admin', password: 'admin123' });
-
-async function submit() {
-  error.value = '';
-  try {
-    await auth.login(form);
-    await router.push((route.query.redirect as string) || '/dashboard');
-  } catch {
-    error.value = 'Username atau password tidak valid.';
-  }
-}
+const loggedOut = computed(() => route.query.logged_out === '1');
+const error = computed(() => (route.query.error ? String(route.query.error) : ''));
 </script>

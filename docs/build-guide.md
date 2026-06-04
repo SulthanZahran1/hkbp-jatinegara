@@ -2,6 +2,12 @@
 
 One-shot implementation guide for the next session. Follow this order to build everything.
 
+> **Auth has migrated to OIDC.** The JWT/password/refresh details below are
+> historical. Authentication is now backend-mediated OIDC against the Auténtico
+> IdP with an opaque `hkbp_session` cookie — see **`docs/AUTH-DESIGN.md`**,
+> `docs/api-spec.md`, and `idp/README.md`. Ignore the JWT-specific dependencies,
+> middleware, seeder, and login-form steps in this guide.
+
 ---
 
 ## Phase 1: Backend Scaffolding
@@ -15,11 +21,12 @@ go mod init github.com/SulthanZahran1/hkbp-jatinegara/backend
 ### 1.2 Install dependencies
 ```bash
 go get github.com/gofiber/fiber/v2
-go get github.com/gofiber/jwt/v2
-go get github.com/golang-jwt/jwt/v5
+go get github.com/coreos/go-oidc/v3/oidc   # OIDC discovery / ID-token verify (JWKS)
+go get golang.org/x/oauth2                 # authorization-code + PKCE
 go get github.com/tursodatabase/libsql-client-go
-go get golang.org/x/crypto/bcrypt
 go get github.com/joho/godotenv
+# Historical (no longer used): github.com/gofiber/jwt/v2, github.com/golang-jwt/jwt/v5,
+# golang.org/x/crypto/bcrypt — credentials/sessions are owned by the IdP now.
 ```
 
 ### 1.3 File structure to create
@@ -261,7 +268,7 @@ export const deleteSector = (id: number) => client.delete(`/sectors/${id}`);
 
 ### 3.1 Environment setup
 1. Start the self-hosted libSQL server: `docker compose up -d turso`
-2. Copy backend `.env.example` → `.env`, keep `TURSO_URL=http://127.0.0.1:8081`, and set `JWT_SECRET`
+2. Copy backend `.env.example` → `.env`, keep `TURSO_URL=http://127.0.0.1:8081`, and set the OIDC/IdP vars (`OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `APP_BASE_URL`, `IDP_ADMIN_BASE_URL`, `IDP_ADMIN_TOKEN`, `BOOTSTRAP_ADMIN_EMAIL`). Deploy/point at an Auténtico IdP (see `idp/README.md`).
 3. Copy frontend `.env.example` → `.env`
 4. Start the backend. Its migration runner applies `backend/migrations/*.sql` to the self-hosted libSQL server.
 
@@ -279,9 +286,10 @@ cd frontend && pnpm dev
 
 ### 3.3 Verify
 1. Visit `http://localhost:5173`
-2. Login with admin/admin123
-3. Create a sector, a user, a family with members
+2. Click "Sign in with HKBP Account" → complete login at the IdP. The first login whose verified email matches `BOOTSTRAP_ADMIN_EMAIL` becomes the admin; other unknown identities land on `/access-pending` pending approval.
+3. As admin: provision a user (shows a one-time setup link), review access requests, create a sector, a family with members
 4. Verify offerings and attendance work
+5. Backend auth logic (callback decisions, cookie sessions, cooldown, rename drift) is covered by `go test ./...` in `backend/` — run it after changes.
 
 ---
 

@@ -4,73 +4,117 @@ Base URL: `http://localhost:8080/api/v1`
 
 ## Authentication
 
-### POST /auth/login
-Authenticate a user and return JWT tokens.
+Backend-mediated OIDC against the IdP (Auténtico). The browser holds only the
+HTTP-only opaque `hkbp_session` cookie — **no JWT, no Bearer tokens, no password
+login, no refresh endpoint**. All authenticated requests send the cookie
+(`withCredentials`). See `docs/AUTH-DESIGN.md` for the full design.
 
-**Request:**
-```json
-{
-  "username": "string",
-  "password": "string"
-}
-```
+### GET /auth/login
+Starts the OIDC authorization-code + PKCE flow. The backend generates
+state/nonce/PKCE (stored in short-lived HTTP-only cookies) and **302-redirects**
+to the IdP authorize URL. This is a full-page browser navigation, not an XHR.
 
-**Response (200):**
-```json
-{
-  "access_token": "string",
-  "refresh_token": "string",
-  "expires_in": 900,
-  "user": {
-    "id": 1,
-    "nama_depan": "string",
-    "nama_belakang": "string",
-    "username": "string",
-    "email": "string",
-    "role_id": 1,
-    "sektor_id": 1,
-    "status": "active"
-  }
-}
-```
+**Response (302):** `Location: <idp authorize url>`
+**Response (503):** `{"error": "identity provider unavailable"}` if OIDC discovery fails.
 
-**Response (401):** `{"error": "invalid credentials"}`
+### GET /auth/callback
+IdP redirect target. Validates `state`, exchanges the code (PKCE), verifies the
+ID token (JWKS, issuer, audience, expiry, nonce), resolves the identity, and:
 
-### POST /auth/refresh
-Refresh an expired access token.
-
-**Request:**
-```json
-{
-  "refresh_token": "string"
-}
-```
-
-**Response (200):**
-```json
-{
-  "access_token": "string",
-  "expires_in": 900
-}
-```
+- on success → sets `hkbp_session` cookie and **302** to the app;
+- otherwise (unknown/unlinked/disabled identity) → creates an access request and
+  **302** to `/access-pending`.
 
 ### GET /auth/me
-Get current user profile. Requires Bearer token.
+Current user profile from the cookie session only.
 
 **Response (200):**
 ```json
 {
   "id": 1,
+  "username": "string",
   "nama_depan": "string",
   "nama_belakang": "string",
-  "username": "string",
-  "email": "string",
+  "email": "string | null",
   "role_id": 1,
+  "role_name": "admin",
   "sektor_id": 1,
   "status": "active",
-  "last_access": "2025-01-01T00:00:00Z"
+  "provisioning_status": "active",
+  "last_access": "2025-01-01 00:00:00",
+  "identity": {
+    "issuer": "https://auth.hkbp.zahranm.cloud",
+    "preferred_username": "string",
+    "email": "string | null",
+    "email_verified": true
+  }
 }
 ```
+
+**Response (401):** `{"error": "not authenticated"}`
+
+### POST /auth/logout
+Revokes the server session, clears the cookie, writes an audit entry, and returns
+the IdP end-session URL so the SPA can complete RP-initiated logout (preventing
+silent SSO re-entry on shared computers).
+
+**Response (200):**
+```json
+{
+  "logout_url": "https://auth.hkbp.zahranm.cloud/...?post_logout_redirect_uri=...",
+  "post_logout_redirect": "https://hkbp.zahranm.cloud/login?logged_out=1"
+}
+```
+
+## Access Requests (admin)
+
+Unknown/unlinked/disabled IdP identities create access requests. Discovery is
+passive via the admin dashboard. Approval never creates a session; the user must
+sign in again. `request_type ∈ {new_user, link_existing_user, reactivate_user}`.
+
+### GET /access-requests
+List requests. Optional `?status=pending|approved|rejected`.
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "request_type": "new_user",
+      "status": "pending",
+      "preferred_username": "string",
+      "email": "string | null",
+      "email_verified": false,
+      "suggested_user_id": null,
+      "suggested_username": null,
+      "target_user_id": null,
+      "created_at": "2026-06-04 00:00:00"
+    }
+  ],
+  "counts": { "pending": 1 }
+}
+```
+
+### POST /access-requests/:id/approve
+Admin only, transactional. Body depends on `request_type`:
+- `new_user`: `{"role_id": 1, "sektor_id": 1, "nama_depan": "string", "nama_belakang": "string"}` (`role_id` required).
+- `link_existing_user`: `{"target_user_id": 1}` (defaults to `suggested_user_id`).
+- `reactivate_user`: no body required.
+
+**Response (200):** `{"id": 1, "status": "approved", "user_id": 5, "message": "..."}`
+
+### POST /access-requests/:id/reject
+Admin only. Body: `{"note": "string"}` (optional). **Response (200):** `{"id": 1, "status": "rejected"}`
+
+### POST /access-requests/:id/reopen
+Admin only. Returns a decided request to pending. **Response (200):** `{"id": 1, "status": "pending"}`
+
+## Audit Logs (admin)
+
+### GET /audit-logs
+Read-only audit log. Optional `?event=` and pagination (`page`, `per_page`).
+**Response (200):** `{"data": [{"id", "event", "actor_username", "target_type", "target_id", "detail", "ip", "created_at"}], "pagination": {...}}`
 
 ---
 
@@ -139,44 +183,73 @@ List all users. Requires admin role.
     {
       "id": 1,
       "username": "string",
-      "email": "string",
+      "email": "string | null",
       "nama_depan": "string",
       "nama_belakang": "string",
       "role_id": 1,
+      "role_name": "admin",
       "sektor_id": 1,
       "status": "active",
-      "last_access": "2025-01-01T00:00:00Z"
+      "provisioning_status": "active",
+      "has_identity": true,
+      "preferred_username": "string",
+      "last_access": "2026-01-01 00:00:00"
     }
   ]
 }
 ```
 
 ### POST /users
-Create a new user. Requires admin role.
+Provision a new user. Requires admin role. Creates the HKBP row first
+(`provisioning_status = pending_idp`), creates the matching IdP account with a
+random unusable bootstrap password (never stored/displayed), links the returned
+subject, marks the user active, and returns a one-time setup link. Credentials
+are owned by the IdP — there is **no** password field.
 
 **Request:**
 ```json
 {
   "username": "string",
-  "email": "string",
-  "password": "string",
+  "email": "string (optional)",
   "nama_depan": "string",
-  "nama_belakang": "string",
+  "nama_belakang": "string (optional)",
   "role_id": 1,
   "sektor_id": 1
 }
 ```
 
+**Response (201):** `{"user_id": 5, "provisioning_status": "active", "setup_url": "https://auth.../oauth2/reset-password?token=...", "expires_at": "..."}`
+**Response (502):** `{"error": "IdP provisioning failed...", "provisioning_status": "failed_idp"}` (retryable)
+**Response (501):** `{"error": "IdP admin API not configured..."}`
+
 ### PUT /users/:id
-Update a user. Requires admin role.
+Update HKBP-owned profile/authorization fields. Requires admin role. Username and
+credentials are not editable here. Changing role/status/sektor is auth-sensitive
+and bumps `session_version` (revokes sessions).
 
-### PUT /users/:id/password
-Change user password. Admin can change any; users can change own.
+**Request:** `{"email": "string | null", "nama_depan": "string", "nama_belakang": "string | null", "role_id": 1, "sektor_id": 1, "status": "active"}`
 
-**Request:** `{"password": "string", "new_password": "string"}`
+### POST /users/:id/setup-link
+Regenerate a one-time setup/reset link for a provisioned user. Requires admin.
+**Response (200):** `{"setup_url": "...", "expires_at": "..."}`
+
+### POST /users/:id/retry-provisioning
+Retry IdP provisioning for a `pending_idp`/`failed_idp` user. Requires admin.
+**Response (200):** `{"user_id": 5, "provisioning_status": "active", "setup_url": "..."}`
+
+### POST /users/:id/rename
+Coordinated IdP + HKBP username rename. Requires admin. Renames the IdP
+`preferred_username` first, then updates `users.username`, bumps `session_version`
+and revokes sessions. If the IdP rename API is unsupported/unavailable, the local
+username is left unchanged and the request is reported as blocked.
+
+**Request:** `{"username": "string"}`
+**Response (200):** `{"id": 5, "username": "newname", "status": "renamed"}`
+**Response (501):** `{"error": "username rename is blocked..."}` (IdP rename unsupported)
 
 ### DELETE /users/:id
-Deactivate a user. Requires admin role.
+Disable a user (`status = inactive`, bumps `session_version`, revokes sessions).
+The OIDC identity link is retained for later `reactivate_user`. Requires admin role.
 
 ---
 

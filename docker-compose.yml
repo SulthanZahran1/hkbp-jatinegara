@@ -10,8 +10,13 @@ services:
     environment:
       PORT: 8080
       SQLITE_PATH: /app/data/hkbp_jatinegara.db
-      JWT_SECRET: ${JWT_SECRET}
-      CORS_ORIGIN: https://hkbp.zahranm.cloud
+      APP_BASE_URL: https://hkbp.zahranm.cloud
+      OIDC_ISSUER: https://auth.hkbp.zahranm.cloud
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-hkbp-app}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      IDP_ADMIN_BASE_URL: https://auth.hkbp.zahranm.cloud
+      IDP_ADMIN_TOKEN: ${IDP_ADMIN_TOKEN}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
       STATIC_DIR: /app/frontend/dist
       UPLOAD_DIR: /app/uploads
       MAX_UPLOAD_SIZE: 5242880

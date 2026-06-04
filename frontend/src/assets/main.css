@@ -313,6 +313,63 @@ th {
   padding: 14px;
 }
 
+.notice {
+  background: #eef4ff;
+  border: 1px solid #c3d6f5;
+  border-radius: 8px;
+  color: #1d4ed8;
+  padding: 10px 12px;
+}
+
+.hint {
+  color: #667085;
+  font-size: 0.875rem;
+}
+
+.badge {
+  background: #fef3c7;
+  border-radius: 999px;
+  color: #92400e;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 2px 10px;
+}
+
+.setup-link {
+  display: grid;
+  gap: 8px;
+}
+
+.setup-link code {
+  background: #f3f4f6;
+  border-radius: 6px;
+  display: block;
+  overflow-wrap: anywhere;
+  padding: 8px;
+}
+
+.request-card {
+  display: grid;
+  gap: 12px;
+}
+
+.request-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.request-head small {
+  color: #667085;
+  display: block;
+}
+
+.filters label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;

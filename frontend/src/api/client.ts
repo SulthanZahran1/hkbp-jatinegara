@@ -1,72 +1,31 @@
-import axios, { type InternalAxiosRequestConfig } from 'axios';
+import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
+// Same-origin in production (the Go server serves the built SPA), proxied to the
+// backend in dev. Auth is the HTTP-only hkbp_session cookie, so every request
+// must send credentials — there are no Bearer tokens anymore.
+const baseURL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
 const client = axios.create({
   baseURL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-let refreshPromise: Promise<string | null> | null = null;
-
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
 client.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+  (error) => {
     const status = error.response?.status;
-    const isAuthRoute = original?.url?.includes('/auth/login') || original?.url?.includes('/auth/refresh');
-
-    if (!original || status !== 401 || original._retry || isAuthRoute) {
-      return Promise.reject(error);
+    const url: string = error.config?.url ?? '';
+    // A 401 on a normal API call means the cookie session expired or was revoked;
+    // bounce to login. The /auth/me probe is exempt so the router guard can treat
+    // its 401 as "not signed in" without causing a redirect loop.
+    if (status === 401 && !url.includes('/auth/me') && window.location.pathname !== '/login') {
+      window.location.assign('/login');
     }
-
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (!refreshToken) {
-      clearAuthAndRedirect();
-      return Promise.reject(error);
-    }
-
-    original._retry = true;
-    refreshPromise ??= axios
-      .post<{ access_token: string }>(`${baseURL}/auth/refresh`, { refresh_token: refreshToken })
-      .then((response) => {
-        localStorage.setItem('access_token', response.data.access_token);
-        return response.data.access_token;
-      })
-      .catch(() => {
-        clearAuthAndRedirect();
-        return null;
-      })
-      .finally(() => {
-        refreshPromise = null;
-      });
-
-    const token = await refreshPromise;
-    if (!token) {
-      return Promise.reject(error);
-    }
-    original.headers.Authorization = `Bearer ${token}`;
-    return client(original);
+    return Promise.reject(error);
   }
 );
-
-function clearAuthAndRedirect() {
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
-  localStorage.removeItem('current_user');
-  if (window.location.pathname !== '/login') {
-    window.location.assign('/login');
-  }
-}
 
 export default client;

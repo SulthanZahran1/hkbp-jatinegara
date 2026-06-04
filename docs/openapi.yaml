@@ -9,10 +9,13 @@ servers:
 
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: hkbp_session
+      description: >-
+        Opaque HTTP-only session cookie issued by the OIDC callback. No JWT or
+        Bearer tokens. See docs/AUTH-DESIGN.md.
 
   schemas:
     Error:
@@ -44,6 +47,7 @@ components:
           type: string
         email:
           type: string
+          nullable: true
         nama_depan:
           type: string
         nama_belakang:
@@ -62,6 +66,14 @@ components:
         status:
           type: string
           enum: [active, inactive]
+        provisioning_status:
+          type: string
+          enum: [pending_idp, active, failed_idp]
+        has_identity:
+          type: boolean
+        preferred_username:
+          type: string
+          nullable: true
         last_access:
           type: string
           nullable: true
@@ -364,87 +376,52 @@ components:
           type: string
 
 security:
-  - bearerAuth: []
+  - cookieAuth: []
 
 paths:
   /auth/login:
-    post:
+    get:
       tags: [Auth]
-      summary: Login
+      summary: Start OIDC login (302 to IdP)
+      description: >-
+        Backend-mediated OIDC. Generates state/nonce/PKCE in short-lived
+        HTTP-only cookies and redirects to the IdP authorize URL. Full-page
+        browser navigation, not an XHR.
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [username, password]
-              properties:
-                username:
-                  type: string
-                password:
-                  type: string
       responses:
-        "200":
-          description: Tokens and user info
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  access_token:
-                    type: string
-                  refresh_token:
-                    type: string
-                  expires_in:
-                    type: integer
-                  user:
-                    $ref: '#/components/schemas/User'
-        "401":
-          description: Invalid credentials
+        "302":
+          description: Redirect to the IdP authorization endpoint
+        "503":
+          description: Identity provider unavailable
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /auth/refresh:
-    post:
+  /auth/callback:
+    get:
       tags: [Auth]
-      summary: Refresh access token
+      summary: OIDC redirect callback
+      description: >-
+        Validates state, exchanges the code (PKCE), verifies the ID token, and
+        either sets the hkbp_session cookie and redirects to the app, or creates
+        an access request and redirects to /access-pending.
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [refresh_token]
-              properties:
-                refresh_token:
-                  type: string
+      parameters:
+        - in: query
+          name: code
+          schema: { type: string }
+        - in: query
+          name: state
+          schema: { type: string }
       responses:
-        "200":
-          description: New access token
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  access_token:
-                    type: string
-                  expires_in:
-                    type: integer
-        "401":
-          description: Invalid refresh token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        "302":
+          description: Redirect to the app or the access-pending page
 
   /auth/me:
     get:
       tags: [Auth]
-      summary: Get current user profile
+      summary: Get current user profile (cookie session)
       responses:
         "200":
           description: Current user
@@ -458,6 +435,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (revoke session, return IdP end-session URL)
+      responses:
+        "200":
+          description: Session revoked; cookie cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logout_url:
+                    type: string
+                  post_logout_redirect:
+                    type: string
 
   /roles:
     get:
@@ -577,22 +571,81 @@ paths:
                       $ref: '#/components/schemas/User'
     post:
       tags: [Users]
-      summary: Create user (admin)
+      summary: Provision user (admin) — creates HKBP row + IdP account
+      description: >-
+        Creates the HKBP user (pending_idp), provisions the matching IdP account
+        with a random unusable bootstrap password (never stored/displayed), links
+        the returned subject, marks the user active, and returns a one-time setup
+        link. No password field — credentials are owned by the IdP.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [username, email, password, nama_depan, role_id]
+              required: [username, nama_depan, role_id]
               properties:
                 username:
                   type: string
                 email:
                   type: string
                   format: email
-                password:
+                  nullable: true
+                nama_depan:
                   type: string
+                nama_belakang:
+                  type: string
+                role_id:
+                  type: integer
+                sektor_id:
+                  type: integer
+                  nullable: true
+      responses:
+        "201":
+          description: Provisioned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: integer
+                  provisioning_status:
+                    type: string
+                  setup_url:
+                    type: string
+                  expires_at:
+                    type: string
+        "502":
+          description: IdP provisioning failed (failed_idp; retryable)
+        "501":
+          description: IdP admin API not configured
+
+  /users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags: [Users]
+      summary: Update user profile/authorization (admin)
+      description: >-
+        Edits HKBP-owned fields only. Username is renamed via /users/{id}/rename;
+        credentials live in the IdP. Role/status/sektor changes bump
+        session_version and revoke sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nama_depan, role_id]
+              properties:
+                email:
+                  type: string
+                  nullable: true
                 nama_depan:
                   type: string
                 nama_belakang:
@@ -606,91 +659,154 @@ paths:
                   type: string
                   enum: [active, inactive]
       responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: integer
-
-  /users/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-    put:
-      tags: [Users]
-      summary: Update user (admin)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [username, email, nama_depan, role_id]
-              properties:
-                username:
-                  type: string
-                email:
-                  type: string
-                nama_depan:
-                  type: string
-                nama_belakang:
-                  type: string
-                role_id:
-                  type: integer
-                sektor_id:
-                  type: integer
-                  nullable: true
-                status:
-                  type: string
-      responses:
         "200":
           description: Updated
         "404":
           description: Not found
     delete:
       tags: [Users]
-      summary: Deactivate user (admin)
+      summary: Disable user (admin) — revokes sessions, retains identity
       responses:
         "204":
-          description: Deactivated
+          description: Disabled
         "404":
           description: Not found
 
-  /users/{id}/password:
+  /users/{id}/setup-link:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-    put:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
       tags: [Users]
-      summary: Change password (admin or own account)
+      summary: Regenerate one-time IdP setup/reset link (admin)
+      responses:
+        "200":
+          description: Setup link
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  setup_url: { type: string }
+                  expires_at: { type: string }
+
+  /users/{id}/retry-provisioning:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Users]
+      summary: Retry IdP provisioning for pending_idp/failed_idp user (admin)
+      responses:
+        "200":
+          description: Provisioned
+
+  /users/{id}/rename:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Users]
+      summary: Coordinated IdP + HKBP username rename (admin)
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [new_password]
+              required: [username]
               properties:
-                password:
-                  type: string
-                  description: Current password (required when not admin)
-                new_password:
-                  type: string
+                username: { type: string }
       responses:
         "200":
-          description: Password changed
-        "401":
-          description: Wrong current password
+          description: Renamed
+        "501":
+          description: IdP rename unsupported — local username unchanged (blocked)
+        "502":
+          description: IdP rename failed — local username unchanged
+
+  /access-requests:
+    get:
+      tags: [Access Requests]
+      summary: List access requests (admin)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: Access requests with pending count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: object }
+                  counts:
+                    type: object
+                    properties:
+                      pending: { type: integer }
+
+  /access-requests/{id}/approve:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Access Requests]
+      summary: Approve an access request (admin, transactional, no session minted)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role_id: { type: integer }
+                sektor_id: { type: integer, nullable: true }
+                nama_depan: { type: string }
+                nama_belakang: { type: string }
+                target_user_id: { type: integer, nullable: true }
+                note: { type: string }
+      responses:
+        "200":
+          description: Approved (user must sign in again)
+
+  /access-requests/{id}/reject:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Access Requests]
+      summary: Reject an access request (admin)
+      responses:
+        "200":
+          description: Rejected
+
+  /access-requests/{id}/reopen:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Access Requests]
+      summary: Reopen a decided access request (admin)
+      responses:
+        "200":
+          description: Reopened (pending)
+
+  /audit-logs:
+    get:
+      tags: [Audit]
+      summary: List audit log entries (admin)
+      parameters:
+        - name: event
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: per_page
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Audit entries
 
   /families:
     get:

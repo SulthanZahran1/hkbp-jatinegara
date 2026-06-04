@@ -50,6 +50,16 @@ Bootstrap policy:
 - `BOOTSTRAP_ADMIN_EMAIL` may create the first active admin only while no active admin exists and the OIDC email is verified.
 - After any active admin exists, `BOOTSTRAP_ADMIN_EMAIL` is inert and unknown identities become pending access requests.
 
+Implementation status (2026-06-04):
+
+- Implemented in the Go backend (`backend/cmd/server/{auth,provisioning,access_requests,audit}.go`), migration `010_auth_oidc.sql`, the Vue SPA, and the IdP image path under `idp/`. Design detail lives in `docs/AUTH-DESIGN.md` and ADR `docs/adr/0004-oidc-cookie-auth.md`.
+- Uses standard Go OIDC libraries: `github.com/coreos/go-oidc/v3` (discovery, JWKS, ID-token verify) + `golang.org/x/oauth2` (authorization-code + PKCE). The old `golang-jwt`/`bcrypt` deps are removed.
+- Migration 010 rebuilds `users` (email optional; `password_hash`/`refresh_token` dropped; `provisioning_status` + `session_version` added) with foreign-keys disabled for the migration run, preserving ids and child references.
+- The setup-password-link is a small HKBP-specific Auténtico patch vendored at `idp/patches/` (validated by spike 001), applied + route-registered by `idp/Dockerfile`. Documented and image-buildable; not yet upstreamed.
+- Username rename is gated by `IDP_SUPPORTS_USERNAME_RENAME` (default false → the endpoint returns blocked/unsupported and audits drift) because the spike did not confirm an upstream Auténtico username-rename API. No silent local-only rename.
+- SPA + API are served same-origin in production; local dev uses a Vite `/api` proxy so the `hkbp_session` cookie behaves identically.
+- `GET /api/v1/audit-logs` exposes the audit log read-only to admins.
+
 ## Architecture
 
 - **Vue SPA** — browser client, communicates with Go backend via JSON API

@@ -1,0 +1,66 @@
+# Deployment for the HKBP IdP (Auténtico) at auth.hkbp.zahranm.cloud.
+# Separate Dokploy/Traefik app from the HKBP application stack so identity
+# infrastructure can be restarted/updated independently. Routing/TLS is handled
+# by the external Traefik on the shared `web` network (same pattern as the app
+# stack); this file only declares the container, its SQLite volume, and a
+# nightly backup sidecar.
+
+services:
+  idp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Pin to a reviewed upstream commit before deploying.
+        AUTENTICO_REF: ${AUTENTICO_REF:-main}
+    image: hkbp-autentico:latest
+    container_name: hkbp-idp
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # SQLite state on the persistent volume.
+      AUTENTICO_DB_FILE_PATH: /app/data/autentico.db
+      # No-personal-email username/password users.
+      AUTENTICO_PROFILE_FIELD_EMAIL: hidden
+    volumes:
+      - idp-data:/app/data
+    networks:
+      - web
+    expose:
+      - "8080"
+
+  # Nightly SQLite backup with retention (target 7-30 days). Uses the same
+  # volume read-only and writes timestamped copies to idp-backups.
+  idp-backup:
+    image: alpine:3.20
+    container_name: hkbp-idp-backup
+    restart: unless-stopped
+    depends_on:
+      - idp
+    volumes:
+      - idp-data:/data:ro
+      - idp-backups:/backups
+    environment:
+      RETENTION_DAYS: ${IDP_BACKUP_RETENTION_DAYS:-14}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache sqlite >/dev/null 2>&1 || true
+        while true; do
+          ts=$$(date +%Y%m%d-%H%M%S)
+          # Use sqlite .backup for a consistent snapshot of the live DB.
+          sqlite3 /data/autentico.db ".backup '/backups/autentico-$$ts.db'" \
+            || cp /data/autentico.db /backups/autentico-$$ts.db
+          find /backups -name 'autentico-*.db' -mtime +$${RETENTION_DAYS} -delete
+          sleep 86400
+        done
+
+volumes:
+  idp-data:
+  idp-backups:
+
+networks:
+  web:
+    external: true

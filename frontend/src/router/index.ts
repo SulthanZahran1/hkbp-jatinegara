@@ -1,9 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 import LoginView from '@/views/LoginView.vue';
+import AccessPendingView from '@/views/AccessPendingView.vue';
 import DashboardView from '@/views/DashboardView.vue';
 import SectorList from '@/views/sectors/SectorList.vue';
 import UserList from '@/views/users/UserList.vue';
+import AccessRequestsView from '@/views/admin/AccessRequestsView.vue';
 import FamilyList from '@/views/families/FamilyList.vue';
 import FamilyDetail from '@/views/families/FamilyDetail.vue';
 import FamilyForm from '@/views/families/FamilyForm.vue';
@@ -18,6 +20,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
+    { path: '/access-pending', name: 'access-pending', component: AccessPendingView, meta: { public: true } },
     {
       path: '/',
       component: DefaultLayout,
@@ -26,6 +29,7 @@ const router = createRouter({
         { path: 'dashboard', name: 'dashboard', component: DashboardView },
         { path: 'sectors', name: 'sectors', component: SectorList, meta: { roles: ['admin'] } },
         { path: 'users', name: 'users', component: UserList, meta: { roles: ['admin'] } },
+        { path: 'access-requests', name: 'access-requests', component: AccessRequestsView, meta: { roles: ['admin'] } },
         { path: 'families', name: 'families', component: FamilyList },
         { path: 'families/new', name: 'family-new', component: FamilyForm },
         { path: 'families/:id', name: 'family-detail', component: FamilyDetail, props: true },
@@ -41,19 +45,18 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore();
+  // Resolve the cookie session once per app load via GET /auth/me.
+  if (!auth.loaded) {
+    await auth.loadMe();
+  }
   if (to.meta.public) {
-    return auth.isAuthenticated && to.path === '/login' ? '/dashboard' : true;
+    if (auth.isAuthenticated && to.path === '/login') {
+      return '/dashboard';
+    }
+    return true;
   }
   if (!auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } };
-  }
-  if (!auth.currentUser) {
-    try {
-      await auth.loadMe();
-    } catch {
-      auth.logout();
-      return { path: '/login', query: { redirect: to.fullPath } };
-    }
   }
   const roles = to.meta.roles as string[] | undefined;
   if (roles?.length && !roles.includes(auth.currentUser?.role_name ?? '')) {

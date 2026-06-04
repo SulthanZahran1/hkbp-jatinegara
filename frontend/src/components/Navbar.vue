@@ -9,14 +9,14 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 
-const router = useRouter();
 const auth = useAuthStore();
 
+// Logout revokes the server session and clears the cookie, then sends the
+// browser through the IdP end-session URL so SSO can't silently re-enter on a
+// shared computer.
 function logout() {
   auth.logout();
-  router.push('/login');
 }
 </script>

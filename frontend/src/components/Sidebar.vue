@@ -32,7 +32,13 @@ const navItems = computed(() => {
     { label: 'Presensi', to: '/attendance' }
   ];
   if (auth.isAdmin) {
-    items.splice(1, 0, { label: 'Sektor', to: '/sectors' }, { label: 'Pengguna', to: '/users' });
+    items.splice(
+      1,
+      0,
+      { label: 'Sektor', to: '/sectors' },
+      { label: 'Pengguna', to: '/users' },
+      { label: 'Permintaan Akses', to: '/access-requests' }
+    );
   }
   return items;
 });

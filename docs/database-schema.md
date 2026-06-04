@@ -58,6 +58,11 @@ CREATE INDEX idx_users_sector ON users(sektor_id);
 CREATE INDEX idx_users_status ON users(status);
 ```
 
+> **Superseded by `010_auth_oidc.sql`.** Migration 010 recreates `users` for the
+> OIDC model: `email` becomes optional (no longer `NOT NULL UNIQUE` — the IdP may
+> have no email), `password_hash`/`refresh_token` are dropped (credentials live in
+> the IdP), and `provisioning_status` + `session_version` are added. See below.
+
 ### 004_create_families.sql
 ```sql
 CREATE TABLE families (
@@ -198,6 +203,95 @@ CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_expires ON refresh_tokens(expires_at);
 ```
 
+> **Dropped by `010_auth_oidc.sql`.** App-local JWT refresh tokens are replaced by
+> opaque cookie sessions (`app_sessions`).
+
+### 010_auth_oidc.sql
+Auth redesign: backend-mediated OIDC + opaque cookie sessions. Recreates `users`
+(via a foreign-keys-off table rebuild that preserves ids and child references)
+and adds the session/identity/access/audit tables. The migration runner disables
+`foreign_keys` for the migration run so the parent `users` table can be rebuilt.
+
+```sql
+-- users rebuilt: email optional, password/refresh removed, provisioning added
+CREATE TABLE users (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    username            TEXT NOT NULL UNIQUE,
+    email               TEXT,                       -- optional; identity email lives in user_identities
+    nama_depan          TEXT NOT NULL,
+    nama_belakang       TEXT,
+    role_id             INTEGER NOT NULL REFERENCES roles(id),
+    sektor_id           INTEGER REFERENCES sectors(id),
+    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+    provisioning_status TEXT NOT NULL DEFAULT 'active' CHECK (provisioning_status IN ('pending_idp','active','failed_idp')),
+    session_version     INTEGER NOT NULL DEFAULT 1,
+    last_access         TEXT,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+DROP TABLE refresh_tokens;
+
+-- Opaque server-side sessions. The cookie holds a random token; only its hash is stored.
+CREATE TABLE app_sessions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash      TEXT NOT NULL UNIQUE,
+    session_version INTEGER NOT NULL,
+    user_agent      TEXT,
+    ip              TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at      TEXT NOT NULL,
+    revoked_at      TEXT
+);
+
+-- OIDC identity link, separate from HKBP profile/authorization fields.
+-- (issuer, subject) is the automatic identity key; preferred_username == users.username.
+CREATE TABLE user_identities (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    issuer             TEXT NOT NULL,
+    subject            TEXT NOT NULL,
+    preferred_username TEXT NOT NULL,
+    email              TEXT,
+    email_verified     INTEGER NOT NULL DEFAULT 0,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (issuer, subject)
+);
+
+-- Approval queue for unknown/unlinked/disabled identities.
+CREATE TABLE access_requests (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_type       TEXT NOT NULL CHECK (request_type IN ('new_user','link_existing_user','reactivate_user')),
+    status             TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+    issuer             TEXT NOT NULL,
+    subject            TEXT NOT NULL,
+    preferred_username TEXT NOT NULL,
+    email              TEXT,
+    email_verified     INTEGER NOT NULL DEFAULT 0,
+    suggested_user_id  INTEGER REFERENCES users(id),
+    target_user_id     INTEGER REFERENCES users(id),
+    decided_by         INTEGER REFERENCES users(id),
+    decided_at         TEXT,
+    decision_note      TEXT,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Generic audit table; MVP wires only auth/access events.
+CREATE TABLE audit_logs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    event         TEXT NOT NULL,
+    actor_user_id INTEGER REFERENCES users(id),
+    target_type   TEXT,
+    target_id     TEXT,
+    detail        TEXT,
+    ip            TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
 ## Entity Relationship Summary
 
 ```
@@ -217,6 +311,10 @@ roles 1──N users
 
 users 1──N offerings (created_by)
 users 1──N attendance (created_by)
+users 1──N app_sessions
+users 1──1 user_identities (one IdP identity per user; UNIQUE(issuer,subject))
+users 0──N access_requests (suggested/target/decided_by)
+users 0──N audit_logs (actor_user_id)
 ```
 
 ## Notes

@@ -10,13 +10,6 @@ export interface ApiList<T> {
   pagination?: Pagination;
 }
 
-export interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-  user: User;
-}
-
 export interface Role {
   id: number;
   name: string;
@@ -30,10 +23,19 @@ export interface Sector {
   updated_at?: string;
 }
 
+export type ProvisioningStatus = 'pending_idp' | 'active' | 'failed_idp';
+
+export interface UserIdentity {
+  issuer: string;
+  preferred_username: string;
+  email: string | null;
+  email_verified: boolean;
+}
+
 export interface User {
   id: number;
   username: string;
-  email: string;
+  email: string | null;
   nama_depan: string;
   nama_belakang: string | null;
   role_id: number;
@@ -41,8 +43,36 @@ export interface User {
   sektor_id: number | null;
   sector_name?: string | null;
   status: 'active' | 'inactive';
+  provisioning_status?: ProvisioningStatus;
+  has_identity?: boolean;
+  preferred_username?: string | null;
+  identity?: UserIdentity | null;
   last_access?: string | null;
   created_at?: string;
+}
+
+export type AccessRequestType = 'new_user' | 'link_existing_user' | 'reactivate_user';
+export type AccessRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface AccessRequest {
+  id: number;
+  request_type: AccessRequestType;
+  status: AccessRequestStatus;
+  issuer: string;
+  subject: string;
+  preferred_username: string;
+  email: string | null;
+  email_verified: boolean;
+  suggested_user_id: number | null;
+  suggested_username: string | null;
+  target_user_id: number | null;
+  target_username: string | null;
+  decided_by: number | null;
+  decided_by_username: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Member {

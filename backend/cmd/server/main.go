@@ -16,60 +16,82 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
 	_ "modernc.org/sqlite"
 )
-
-const bcryptCost = 12
 
 type Config struct {
 	Port          string
 	Driver        string
 	DSN           string
-	JWTSecret     string
-	AccessExpiry  time.Duration
-	RefreshExpiry time.Duration
+	MigrationsDir string
 	CORSOrigin    string
 	UploadDir     string
 	StaticDir     string
 	MaxUploadSize int64
+
+	// OIDC / IdP
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCRedirectURL  string
+	OIDCScopes       []string
+
+	// HKBP app URLs used for post-auth redirects.
+	AppBaseURL            string
+	PostLogoutRedirectURL string
+	AccessPendingURL      string
+
+	// Opaque cookie session.
+	CookieName   string
+	CookieDomain string
+	CookieSecure bool
+	SessionTTL   time.Duration
+
+	// IdP management API (provisioning, setup links, rename).
+	IdPAdminBaseURL           string
+	IdPAdminToken             string
+	IdPSupportsUsernameRename bool
+
+	// Bootstrap + access-request policy.
+	BootstrapAdminEmail string
+	RejectedCooldown    time.Duration
 }
 
 type Server struct {
 	db  *sql.DB
 	cfg Config
+
+	oidcMu       sync.Mutex
+	oidcProvider *oidc.Provider
+	oidcVerifier *oidc.IDTokenVerifier
+	oauth2Config *oauth2.Config
+	idp          *idpClient
 }
 
 type AuthUser struct {
-	ID           int64
-	Username     string
-	Email        string
-	PasswordHash string
-	NamaDepan    string
-	NamaBelakang *string
-	RoleID       int64
-	RoleName     string
-	SektorID     *int64
-	Status       string
-	LastAccess   *string
-}
-
-type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
+	ID                 int64
+	Username           string
+	Email              *string
+	NamaDepan          string
+	NamaBelakang       *string
+	RoleID             int64
+	RoleName           string
+	SektorID           *int64
+	Status             string
+	ProvisioningStatus string
+	SessionVersion     int64
+	LastAccess         *string
 }
 
 type SectorRequest struct {
@@ -77,15 +99,12 @@ type SectorRequest struct {
 }
 
 type UserRequest struct {
-	Username     string `json:"username"`
 	Email        string `json:"email"`
-	Password     string `json:"password"`
 	NamaDepan    string `json:"nama_depan"`
 	NamaBelakang string `json:"nama_belakang"`
 	RoleID       int64  `json:"role_id"`
 	SektorID     *int64 `json:"sektor_id"`
 	Status       string `json:"status"`
-	NewPassword  string `json:"new_password"`
 }
 
 type FamilyRequest struct {
@@ -167,18 +186,24 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := runMigrations(db); err != nil {
+	if err := runMigrations(db, cfg.MigrationsDir); err != nil {
 		log.Fatalf("migrations: %v", err)
-	}
-	if err := seedAdmin(db); err != nil {
-		log.Fatalf("seed admin: %v", err)
 	}
 
 	if err := os.MkdirAll(cfg.UploadDir, 0755); err != nil {
 		log.Fatalf("upload dir: %v", err)
 	}
 
-	server := &Server{db: db, cfg: cfg}
+	server := &Server{db: db, cfg: cfg, idp: newIDPClient(cfg)}
+	// OIDC discovery is attempted lazily so the server still starts (and serves
+	// /health) when the IdP is briefly unreachable. Warm it up best-effort here.
+	if cfg.OIDCIssuer != "" {
+		if err := server.ensureOIDC(context.Background()); err != nil {
+			log.Printf("warning: OIDC provider not ready (%v); /api/v1/auth/login will retry discovery on demand", err)
+		}
+	} else {
+		log.Printf("warning: OIDC_ISSUER not set; auth endpoints are disabled until configured")
+	}
 	app := fiber.New(fiber.Config{
 		BodyLimit: int(cfg.MaxUploadSize + 1024*1024),
 	})
@@ -229,17 +254,43 @@ func loadConfig() Config {
 		dsn = tursoURL + sep + "authToken=" + tursoToken
 	}
 
+	appBaseURL := strings.TrimRight(env("APP_BASE_URL", "http://localhost:5173"), "/")
+	scopes := strings.Fields(env("OIDC_SCOPES", "openid profile email"))
+	if len(scopes) == 0 {
+		scopes = []string{"openid", "profile", "email"}
+	}
+
 	return Config{
 		Port:          port,
 		Driver:        driver,
 		DSN:           dsn,
-		JWTSecret:     env("JWT_SECRET", "dev-secret-change-before-production"),
-		AccessExpiry:  secondsEnv("JWT_ACCESS_EXPIRY", 900),
-		RefreshExpiry: secondsEnv("JWT_REFRESH_EXPIRY", 604800),
+		MigrationsDir: env("MIGRATIONS_DIR", "migrations"),
 		CORSOrigin:    env("CORS_ORIGIN", "http://localhost:5173"),
 		UploadDir:     env("UPLOAD_DIR", "./uploads"),
 		StaticDir:     env("STATIC_DIR", ""),
 		MaxUploadSize: int64Env("MAX_UPLOAD_SIZE", 5242880),
+
+		OIDCIssuer:       strings.TrimRight(env("OIDC_ISSUER", ""), "/"),
+		OIDCClientID:     env("OIDC_CLIENT_ID", ""),
+		OIDCClientSecret: env("OIDC_CLIENT_SECRET", ""),
+		OIDCRedirectURL:  env("OIDC_REDIRECT_URL", appBaseURL+"/api/v1/auth/callback"),
+		OIDCScopes:       scopes,
+
+		AppBaseURL:            appBaseURL,
+		PostLogoutRedirectURL: env("POST_LOGOUT_REDIRECT_URL", appBaseURL+"/login?logged_out=1"),
+		AccessPendingURL:      env("ACCESS_PENDING_URL", appBaseURL+"/access-pending"),
+
+		CookieName:   env("SESSION_COOKIE_NAME", "hkbp_session"),
+		CookieDomain: env("SESSION_COOKIE_DOMAIN", ""),
+		CookieSecure: boolEnv("SESSION_COOKIE_SECURE", strings.HasPrefix(appBaseURL, "https://")),
+		SessionTTL:   secondsEnv("SESSION_TTL", 43200),
+
+		IdPAdminBaseURL:           strings.TrimRight(env("IDP_ADMIN_BASE_URL", env("OIDC_ISSUER", "")), "/"),
+		IdPAdminToken:             env("IDP_ADMIN_TOKEN", ""),
+		IdPSupportsUsernameRename: boolEnv("IDP_SUPPORTS_USERNAME_RENAME", false),
+
+		BootstrapAdminEmail: strings.TrimSpace(env("BOOTSTRAP_ADMIN_EMAIL", "")),
+		RejectedCooldown:    secondsEnv("ACCESS_REQUEST_COOLDOWN", 7200),
 	}
 }
 
@@ -260,7 +311,10 @@ func openDB(cfg Config) (*sql.DB, error) {
 	return db, nil
 }
 
-func runMigrations(db *sql.DB) error {
+func runMigrations(db *sql.DB, dir string) error {
+	if dir == "" {
+		dir = "migrations"
+	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS _migrations (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL UNIQUE,
@@ -269,7 +323,15 @@ func runMigrations(db *sql.DB) error {
 		return err
 	}
 
-	entries, err := os.ReadDir("migrations")
+	// Some migrations rebuild parent tables (e.g. recreating `users`). With a
+	// single pooled connection (MaxOpenConns=1) we can disable foreign-key
+	// enforcement for the migration run so a parent table can be dropped/renamed
+	// without cascading deletes; child-row references are preserved because ids
+	// are kept. Best-effort: remote libSQL may ignore the pragma.
+	_, _ = db.Exec("PRAGMA foreign_keys=OFF")
+	defer func() { _, _ = db.Exec("PRAGMA foreign_keys=ON") }()
+
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
@@ -291,7 +353,7 @@ func runMigrations(db *sql.DB) error {
 			continue
 		}
 
-		body, err := os.ReadFile(filepath.Join("migrations", entry.Name()))
+		body, err := os.ReadFile(filepath.Join(dir, entry.Name()))
 		if err != nil {
 			return err
 		}
@@ -355,32 +417,6 @@ func execSQLStatements(tx *sql.Tx, sqlBody string) error {
 	return nil
 }
 
-func seedAdmin(db *sql.DB) error {
-	var count int
-	if err := db.QueryRow("SELECT COUNT(1) FROM users").Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-
-	var roleID int64
-	if err := db.QueryRow("SELECT id FROM roles WHERE name = 'admin'").Scan(&roleID); err != nil {
-		return err
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcryptCost)
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec(`INSERT INTO users
-		(username, email, password_hash, nama_depan, nama_belakang, role_id, sektor_id, status)
-		VALUES (?, ?, ?, ?, ?, ?, NULL, 'active')`,
-		"admin", "admin@hkbpjatinegara.local", string(hash), "Admin", "HKBP", roleID)
-	return err
-}
-
 const swaggerUI = `<!DOCTYPE html>
 <html>
 <head>
@@ -420,13 +456,25 @@ func (s *Server) registerRoutes(app *fiber.App) {
 	})
 
 	api := app.Group("/api/v1")
-	api.Post("/auth/login", s.login)
-	api.Post("/auth/refresh", s.refresh)
+	// Backend-mediated OIDC. No password/refresh endpoints: the IdP owns
+	// credentials and the browser only ever holds the opaque hkbp_session cookie.
+	api.Get("/auth/login", s.authLogin)
+	api.Get("/auth/callback", s.authCallback)
+	api.Post("/auth/logout", s.authLogout)
 
 	protected := api.Group("", s.authMiddleware)
 	protected.Get("/auth/me", s.me)
 
 	protected.Get("/roles", s.listRoles)
+
+	// Admin: access-request review queue.
+	protected.Get("/access-requests", requireRole("admin"), s.listAccessRequests)
+	protected.Post("/access-requests/:id/approve", requireRole("admin"), s.approveAccessRequest)
+	protected.Post("/access-requests/:id/reject", requireRole("admin"), s.rejectAccessRequest)
+	protected.Post("/access-requests/:id/reopen", requireRole("admin"), s.reopenAccessRequest)
+
+	// Admin: audit log (read-only).
+	protected.Get("/audit-logs", requireRole("admin"), s.listAuditLogs)
 
 	protected.Get("/sectors", s.listSectors)
 	protected.Post("/sectors", requireRole("admin"), s.createSector)
@@ -434,9 +482,11 @@ func (s *Server) registerRoutes(app *fiber.App) {
 	protected.Delete("/sectors/:id", requireRole("admin"), s.deleteSector)
 
 	protected.Get("/users", requireRole("admin"), s.listUsers)
-	protected.Post("/users", requireRole("admin"), s.createUser)
+	protected.Post("/users", requireRole("admin"), s.provisionUser)
 	protected.Put("/users/:id", requireRole("admin"), s.updateUser)
-	protected.Put("/users/:id/password", s.changePassword)
+	protected.Post("/users/:id/setup-link", requireRole("admin"), s.createUserSetupLink)
+	protected.Post("/users/:id/retry-provisioning", requireRole("admin"), s.retryProvisioning)
+	protected.Post("/users/:id/rename", requireRole("admin"), s.renameUser)
 	protected.Delete("/users/:id", requireRole("admin"), s.deleteUser)
 
 	protected.Get("/families", s.listFamilies)
@@ -485,106 +535,6 @@ func registerStaticRoutes(app *fiber.App, staticDir string) {
 	})
 }
 
-func (s *Server) login(c *fiber.Ctx) error {
-	var req LoginRequest
-	if err := c.BodyParser(&req); err != nil {
-		return badRequest(c, "invalid request body")
-	}
-	req.Username = strings.TrimSpace(req.Username)
-	if req.Username == "" || req.Password == "" {
-		return badRequest(c, "username and password are required")
-	}
-
-	user, err := s.findAuthUserByUsername(req.Username)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
-		}
-		return internalError(c, err)
-	}
-	if user.Status != "active" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
-	}
-
-	accessToken, err := s.generateAccessToken(user)
-	if err != nil {
-		return internalError(c, err)
-	}
-	refreshToken, err := randomToken()
-	if err != nil {
-		return internalError(c, err)
-	}
-	refreshHash := hashToken(refreshToken)
-	expiresAt := time.Now().UTC().Add(s.cfg.RefreshExpiry).Format(time.RFC3339)
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return internalError(c, err)
-	}
-	if _, err := tx.Exec("DELETE FROM refresh_tokens WHERE user_id = ? OR expires_at <= datetime('now')", user.ID); err != nil {
-		_ = tx.Rollback()
-		return internalError(c, err)
-	}
-	if _, err := tx.Exec("INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)", user.ID, refreshHash, expiresAt); err != nil {
-		_ = tx.Rollback()
-		return internalError(c, err)
-	}
-	if _, err := tx.Exec("UPDATE users SET last_access = datetime('now'), updated_at = datetime('now') WHERE id = ?", user.ID); err != nil {
-		_ = tx.Rollback()
-		return internalError(c, err)
-	}
-	if err := tx.Commit(); err != nil {
-		return internalError(c, err)
-	}
-
-	return c.JSON(fiber.Map{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
-		"expires_in":    int(s.cfg.AccessExpiry.Seconds()),
-		"user":          user.publicMap(),
-	})
-}
-
-func (s *Server) refresh(c *fiber.Ctx) error {
-	var req RefreshRequest
-	if err := c.BodyParser(&req); err != nil {
-		return badRequest(c, "invalid request body")
-	}
-	if strings.TrimSpace(req.RefreshToken) == "" {
-		return badRequest(c, "refresh_token is required")
-	}
-
-	userID, err := s.userIDByRefreshToken(req.RefreshToken)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid refresh token"})
-		}
-		return internalError(c, err)
-	}
-	user, err := s.findAuthUserByID(userID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid refresh token"})
-		}
-		return internalError(c, err)
-	}
-	if user.Status != "active" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid refresh token"})
-	}
-
-	accessToken, err := s.generateAccessToken(user)
-	if err != nil {
-		return internalError(c, err)
-	}
-	return c.JSON(fiber.Map{
-		"access_token": accessToken,
-		"expires_in":   int(s.cfg.AccessExpiry.Seconds()),
-	})
-}
-
 func (s *Server) me(c *fiber.Ctx) error {
 	userID := localInt64(c, "user_id")
 	user, err := s.findAuthUserByID(userID)
@@ -594,104 +544,56 @@ func (s *Server) me(c *fiber.Ctx) error {
 		}
 		return internalError(c, err)
 	}
-	return c.JSON(user.publicMap())
-}
-
-func (s *Server) findAuthUserByUsername(username string) (AuthUser, error) {
-	return s.scanAuthUser(s.db.QueryRow(`SELECT u.id, u.username, u.email, u.password_hash, u.nama_depan,
-		u.nama_belakang, u.role_id, r.name, u.sektor_id, u.status, u.last_access
-		FROM users u JOIN roles r ON r.id = u.role_id WHERE u.username = ?`, username))
+	identity, _ := s.identityForUser(userID)
+	return c.JSON(user.publicMap(identity))
 }
 
 func (s *Server) findAuthUserByID(id int64) (AuthUser, error) {
-	return s.scanAuthUser(s.db.QueryRow(`SELECT u.id, u.username, u.email, u.password_hash, u.nama_depan,
-		u.nama_belakang, u.role_id, r.name, u.sektor_id, u.status, u.last_access
+	return scanAuthUser(s.db.QueryRow(`SELECT u.id, u.username, u.email, u.nama_depan,
+		u.nama_belakang, u.role_id, r.name, u.sektor_id, u.status, u.provisioning_status, u.session_version, u.last_access
 		FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ?`, id))
 }
 
-func (s *Server) scanAuthUser(row scanner) (AuthUser, error) {
+func scanAuthUser(row scanner) (AuthUser, error) {
 	var user AuthUser
-	var namaBelakang, lastAccess sql.NullString
+	var email, namaBelakang, lastAccess sql.NullString
 	var sektorID sql.NullInt64
-	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.NamaDepan,
-		&namaBelakang, &user.RoleID, &user.RoleName, &sektorID, &user.Status, &lastAccess)
+	err := row.Scan(&user.ID, &user.Username, &email, &user.NamaDepan,
+		&namaBelakang, &user.RoleID, &user.RoleName, &sektorID, &user.Status,
+		&user.ProvisioningStatus, &user.SessionVersion, &lastAccess)
 	if err != nil {
 		return user, err
 	}
+	user.Email = stringPtr(email)
 	user.NamaBelakang = stringPtr(namaBelakang)
 	user.SektorID = int64Ptr(sektorID)
 	user.LastAccess = stringPtr(lastAccess)
 	return user, nil
 }
 
-func (u AuthUser) publicMap() fiber.Map {
-	return fiber.Map{
-		"id":            u.ID,
-		"nama_depan":    u.NamaDepan,
-		"nama_belakang": u.NamaBelakang,
-		"username":      u.Username,
-		"email":         u.Email,
-		"role_id":       u.RoleID,
-		"role_name":     u.RoleName,
-		"sektor_id":     u.SektorID,
-		"status":        u.Status,
-		"last_access":   u.LastAccess,
+func (u AuthUser) publicMap(identity *Identity) fiber.Map {
+	m := fiber.Map{
+		"id":                  u.ID,
+		"nama_depan":          u.NamaDepan,
+		"nama_belakang":       u.NamaBelakang,
+		"username":            u.Username,
+		"email":               u.Email,
+		"role_id":             u.RoleID,
+		"role_name":           u.RoleName,
+		"sektor_id":           u.SektorID,
+		"status":              u.Status,
+		"provisioning_status": u.ProvisioningStatus,
+		"last_access":         u.LastAccess,
 	}
-}
-
-func (s *Server) userIDByRefreshToken(token string) (int64, error) {
-	var userID int64
-	err := s.db.QueryRow(`SELECT user_id FROM refresh_tokens
-		WHERE token_hash = ? AND expires_at > datetime('now')`, hashToken(token)).Scan(&userID)
-	return userID, err
-}
-
-func (s *Server) generateAccessToken(user AuthUser) (string, error) {
-	claims := jwt.MapClaims{
-		"user_id":   user.ID,
-		"role_id":   user.RoleID,
-		"role":      user.RoleName,
-		"sektor_id": user.SektorID,
-		"exp":       time.Now().UTC().Add(s.cfg.AccessExpiry).Unix(),
-		"iat":       time.Now().UTC().Unix(),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(s.cfg.JWTSecret))
-}
-
-func (s *Server) authMiddleware(c *fiber.Ctx) error {
-	header := c.Get("Authorization")
-	if !strings.HasPrefix(header, "Bearer ") {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing bearer token"})
-	}
-	raw := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-	token, err := jwt.Parse(raw, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method")
+	if identity != nil {
+		m["identity"] = fiber.Map{
+			"issuer":             identity.Issuer,
+			"preferred_username": identity.PreferredUsername,
+			"email":              identity.Email,
+			"email_verified":     identity.EmailVerified,
 		}
-		return []byte(s.cfg.JWTSecret), nil
-	})
-	if err != nil || !token.Valid {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token"})
 	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token"})
-	}
-	userID, ok := claimInt64(claims["user_id"])
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token"})
-	}
-	roleID, _ := claimInt64(claims["role_id"])
-	roleName, _ := claims["role"].(string)
-	c.Locals("user_id", userID)
-	c.Locals("role_id", roleID)
-	c.Locals("role", roleName)
-	if sectorID, ok := claimInt64(claims["sektor_id"]); ok {
-		c.Locals("sektor_id", sectorID)
-	}
-	return c.Next()
+	return m
 }
 
 func requireRole(roles ...string) fiber.Handler {
@@ -803,10 +705,12 @@ func (s *Server) deleteSector(c *fiber.Ctx) error {
 
 func (s *Server) listUsers(c *fiber.Ctx) error {
 	query := `SELECT u.id, u.username, u.email, u.nama_depan, u.nama_belakang,
-		u.role_id, r.name, u.sektor_id, s.name, u.status, u.last_access, u.created_at
+		u.role_id, r.name, u.sektor_id, s.name, u.status, u.provisioning_status,
+		ui.preferred_username, u.last_access, u.created_at
 		FROM users u
 		JOIN roles r ON r.id = u.role_id
 		LEFT JOIN sectors s ON s.id = u.sektor_id
+		LEFT JOIN user_identities ui ON ui.user_id = u.id
 		WHERE 1 = 1`
 	args := []any{}
 	if sector := c.Query("sektor_id"); sector != "" {
@@ -832,34 +736,10 @@ func (s *Server) listUsers(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": data})
 }
 
-func (s *Server) createUser(c *fiber.Ctx) error {
-	var req UserRequest
-	if err := c.BodyParser(&req); err != nil {
-		return badRequest(c, "invalid request body")
-	}
-	if req.Username == "" || req.Email == "" || req.Password == "" || req.NamaDepan == "" || req.RoleID == 0 {
-		return badRequest(c, "username, email, password, nama_depan, and role_id are required")
-	}
-	status := req.Status
-	if status == "" {
-		status = "active"
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcryptCost)
-	if err != nil {
-		return internalError(c, err)
-	}
-	res, err := s.db.Exec(`INSERT INTO users
-		(username, email, password_hash, nama_depan, nama_belakang, role_id, sektor_id, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		strings.TrimSpace(req.Username), strings.TrimSpace(req.Email), string(hash), strings.TrimSpace(req.NamaDepan),
-		nilIfEmpty(req.NamaBelakang), req.RoleID, req.SektorID, status)
-	if err != nil {
-		return badRequest(c, err.Error())
-	}
-	id, _ := res.LastInsertId()
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"id": id})
-}
-
+// updateUser edits HKBP-owned profile/authorization fields only. Username is an
+// IdP-coordinated rename (see renameUser); credentials live in the IdP. Changing
+// role/sektor/status is auth-sensitive and bumps session_version to invalidate
+// existing sessions.
 func (s *Server) updateUser(c *fiber.Ctx) error {
 	id, err := paramID(c)
 	if err != nil {
@@ -869,17 +749,34 @@ func (s *Server) updateUser(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return badRequest(c, "invalid request body")
 	}
-	if req.Username == "" || req.Email == "" || req.NamaDepan == "" || req.RoleID == 0 {
-		return badRequest(c, "username, email, nama_depan, and role_id are required")
+	if req.NamaDepan == "" || req.RoleID == 0 {
+		return badRequest(c, "nama_depan and role_id are required")
 	}
 	status := req.Status
 	if status == "" {
 		status = "active"
 	}
+
+	var curRoleID int64
+	var curStatus string
+	var curSektor sql.NullInt64
+	if err := s.db.QueryRow("SELECT role_id, status, sektor_id FROM users WHERE id = ?", id).
+		Scan(&curRoleID, &curStatus, &curSektor); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return notFound(c, "user not found")
+		}
+		return internalError(c, err)
+	}
+	sensitive := curRoleID != req.RoleID || curStatus != status || !sameNullInt(curSektor, req.SektorID)
+
+	bump := ""
+	if sensitive {
+		bump = ", session_version = session_version + 1"
+	}
 	res, err := s.db.Exec(`UPDATE users
-		SET username = ?, email = ?, nama_depan = ?, nama_belakang = ?, role_id = ?, sektor_id = ?, status = ?, updated_at = datetime('now')
+		SET email = ?, nama_depan = ?, nama_belakang = ?, role_id = ?, sektor_id = ?, status = ?`+bump+`, updated_at = datetime('now')
 		WHERE id = ?`,
-		strings.TrimSpace(req.Username), strings.TrimSpace(req.Email), strings.TrimSpace(req.NamaDepan),
+		nilIfEmpty(req.Email), strings.TrimSpace(req.NamaDepan),
 		nilIfEmpty(req.NamaBelakang), req.RoleID, req.SektorID, status, id)
 	if err != nil {
 		return badRequest(c, err.Error())
@@ -887,63 +784,34 @@ func (s *Server) updateUser(c *fiber.Ctx) error {
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return notFound(c, "user not found")
 	}
+	if sensitive {
+		_, _ = s.db.Exec("UPDATE app_sessions SET revoked_at = datetime('now') WHERE user_id = ? AND revoked_at IS NULL", id)
+		actor := localUserPtr(c)
+		s.audit(s.db, EventSessionRevoked, actor, "user", strconv.FormatInt(id, 10),
+			map[string]any{"reason": "user_updated", "status": status, "role_id": req.RoleID}, clientIP(c))
+	}
 	return c.JSON(fiber.Map{"id": id})
 }
 
-func (s *Server) changePassword(c *fiber.Ctx) error {
-	id, err := paramID(c)
-	if err != nil {
-		return badRequest(c, "invalid user id")
-	}
-	var req UserRequest
-	if err := c.BodyParser(&req); err != nil {
-		return badRequest(c, "invalid request body")
-	}
-	if req.NewPassword == "" {
-		return badRequest(c, "new_password is required")
-	}
-	currentUserID := localInt64(c, "user_id")
-	isAdmin := c.Locals("role") == "admin"
-	if !isAdmin && currentUserID != id {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "forbidden"})
-	}
-	if !isAdmin {
-		user, err := s.findAuthUserByID(id)
-		if err != nil {
-			return internalError(c, err)
-		}
-		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid password"})
-		}
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcryptCost)
-	if err != nil {
-		return internalError(c, err)
-	}
-	res, err := s.db.Exec("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?", string(hash), id)
-	if err != nil {
-		return internalError(c, err)
-	}
-	if affected, _ := res.RowsAffected(); affected == 0 {
-		return notFound(c, "user not found")
-	}
-	_, _ = s.db.Exec("DELETE FROM refresh_tokens WHERE user_id = ?", id)
-	return c.JSON(fiber.Map{"status": "ok"})
-}
-
+// deleteUser soft-disables a user: status=inactive, session_version bumped, all
+// sessions revoked. The OIDC identity link is retained so the user can later
+// re-request access (reactivate_user) after the cooldown.
 func (s *Server) deleteUser(c *fiber.Ctx) error {
 	id, err := paramID(c)
 	if err != nil {
 		return badRequest(c, "invalid user id")
 	}
-	res, err := s.db.Exec("UPDATE users SET status = 'inactive', updated_at = datetime('now') WHERE id = ?", id)
+	res, err := s.db.Exec("UPDATE users SET status = 'inactive', session_version = session_version + 1, updated_at = datetime('now') WHERE id = ?", id)
 	if err != nil {
 		return internalError(c, err)
 	}
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return notFound(c, "user not found")
 	}
+	_, _ = s.db.Exec("UPDATE app_sessions SET revoked_at = datetime('now') WHERE user_id = ? AND revoked_at IS NULL", id)
+	actor := localUserPtr(c)
+	s.audit(s.db, EventSessionRevoked, actor, "user", strconv.FormatInt(id, 10),
+		map[string]any{"reason": "user_disabled"}, clientIP(c))
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
@@ -1745,26 +1613,30 @@ func scanOfferingRows(rows *sql.Rows) ([]fiber.Map, error) {
 
 func scanUserRow(rows *sql.Rows) (fiber.Map, error) {
 	var id, roleID int64
-	var username, email, namaDepan, roleName, status, createdAt string
-	var namaBelakang, sectorName, lastAccess sql.NullString
+	var username, namaDepan, roleName, status, provisioningStatus, createdAt string
+	var email, namaBelakang, sectorName, preferredUsername, lastAccess sql.NullString
 	var sektorID sql.NullInt64
 	if err := rows.Scan(&id, &username, &email, &namaDepan, &namaBelakang, &roleID,
-		&roleName, &sektorID, &sectorName, &status, &lastAccess, &createdAt); err != nil {
+		&roleName, &sektorID, &sectorName, &status, &provisioningStatus,
+		&preferredUsername, &lastAccess, &createdAt); err != nil {
 		return nil, err
 	}
 	return fiber.Map{
-		"id":            id,
-		"username":      username,
-		"email":         email,
-		"nama_depan":    namaDepan,
-		"nama_belakang": stringPtr(namaBelakang),
-		"role_id":       roleID,
-		"role_name":     roleName,
-		"sektor_id":     int64Ptr(sektorID),
-		"sector_name":   stringPtr(sectorName),
-		"status":        status,
-		"last_access":   stringPtr(lastAccess),
-		"created_at":    createdAt,
+		"id":                  id,
+		"username":            username,
+		"email":               stringPtr(email),
+		"nama_depan":          namaDepan,
+		"nama_belakang":       stringPtr(namaBelakang),
+		"role_id":             roleID,
+		"role_name":           roleName,
+		"sektor_id":           int64Ptr(sektorID),
+		"sector_name":         stringPtr(sectorName),
+		"status":              status,
+		"provisioning_status": provisioningStatus,
+		"has_identity":        preferredUsername.Valid,
+		"preferred_username":  stringPtr(preferredUsername),
+		"last_access":         stringPtr(lastAccess),
+		"created_at":          createdAt,
 	}, nil
 }
 
@@ -1789,6 +1661,44 @@ func int64Env(key string, fallback int64) int64 {
 		return fallback
 	}
 	return parsed
+}
+
+func boolEnv(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	switch strings.ToLower(value) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func sameNullInt(cur sql.NullInt64, next *int64) bool {
+	if cur.Valid != (next != nil) {
+		return false
+	}
+	if next == nil {
+		return true
+	}
+	return cur.Int64 == *next
+}
+
+// localUserPtr returns the authenticated user id from request locals, or nil for
+// unauthenticated contexts (e.g. the OIDC callback before a session exists).
+func localUserPtr(c *fiber.Ctx) *int64 {
+	if v, ok := c.Locals("user_id").(int64); ok && v > 0 {
+		return &v
+	}
+	return nil
+}
+
+func clientIP(c *fiber.Ctx) string {
+	return c.IP()
 }
 
 func paramID(c *fiber.Ctx) (int64, error) {
