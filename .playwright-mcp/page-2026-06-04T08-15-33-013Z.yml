@@ -1,0 +1,7 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - heading "HKBP Jatinegara" [level=1] [ref=e6]
+      - paragraph [ref=e7]: Administrasi Jemaat
+    - button "Masuk dengan Akun HKBP" [ref=e8] [cursor=pointer]
+    - paragraph [ref=e9]: Anda akan diarahkan ke halaman masuk yang aman.

@@ -81,15 +81,14 @@ docker exec -it hkbp-idp autentico client create \
 flow (authorize → callback → cookie session), access requests for self-signup
 identities, admin approval, and logout. No admin token needed for this path.
 
-**Needs follow-up (Stage B):** Auténtico's admin API (`POST /admin/api/users`,
+**Stage B (implemented):** Auténtico's admin API (`POST /admin/api/users`,
 `/setup-password-link`, client/username management) is protected by an **admin
 OIDC access token** (audience `autentico-admin`), not a static bearer token. The
-HKBP `idpClient` currently sends a static `IDP_ADMIN_TOKEN`, so HKBP-initiated
-**provisioning / setup-link / rename** will not authenticate until the client is
-extended to mint an admin token via the `autentico-admin` client
-(client-credentials or password grant, with `AUTENTICO_ENABLE_ADMIN_PASSWORD_GRANT=true`)
-and cache/refresh it. Until then, onboard users via Auténtico self-signup +
-HKBP access-request approval.
+HKBP `idpClient` mints and caches one via the password grant on the
+`autentico-admin` client using `IDP_ADMIN_USERNAME`/`IDP_ADMIN_PASSWORD` (requires
+`AUTENTICO_ENABLE_ADMIN_PASSWORD_GRANT=true` on the IdP). A static
+`IDP_ADMIN_TOKEN`, if set, takes precedence. HKBP-initiated provisioning /
+setup-link / rename therefore work from the HKBP admin UI.
 
 ## Backup & restore
 

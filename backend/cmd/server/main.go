@@ -61,6 +61,10 @@ type Config struct {
 	// IdP management API (provisioning, setup links, rename).
 	IdPAdminBaseURL           string
 	IdPAdminToken             string
+	IdPAdminUsername          string
+	IdPAdminPassword          string
+	IdPAdminClientID          string
+	IdPTokenURL               string
 	IdPSupportsUsernameRename bool
 
 	// Bootstrap + access-request policy.
@@ -289,6 +293,10 @@ func loadConfig() Config {
 		// the admin base defaults to the issuer with a trailing /oauth2 stripped.
 		IdPAdminBaseURL:           strings.TrimRight(env("IDP_ADMIN_BASE_URL", strings.TrimSuffix(strings.TrimRight(env("OIDC_ISSUER", ""), "/"), "/oauth2")), "/"),
 		IdPAdminToken:             env("IDP_ADMIN_TOKEN", ""),
+		IdPAdminUsername:          env("IDP_ADMIN_USERNAME", ""),
+		IdPAdminPassword:          env("IDP_ADMIN_PASSWORD", ""),
+		IdPAdminClientID:          env("IDP_ADMIN_CLIENT_ID", "autentico-admin"),
+		IdPTokenURL:               env("IDP_TOKEN_URL", ""),
 		IdPSupportsUsernameRename: boolEnv("IDP_SUPPORTS_USERNAME_RENAME", false),
 
 		BootstrapAdminEmail: strings.TrimSpace(env("BOOTSTRAP_ADMIN_EMAIL", "")),

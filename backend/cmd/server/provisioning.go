@@ -9,31 +9,116 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 // idpClient talks to the IdP (Auténtico) management API for provisioning,
-// one-time setup links, and username renames. The exact admin auth scheme is
-// configured via IDP_ADMIN_TOKEN; see docs/AUTH-DESIGN.md.
+// one-time setup links, and username renames. Auténtico's admin API is protected
+// by an admin OIDC access token (audience autentico-admin), so the client mints
+// one via the password grant on the admin client and caches it. A static
+// IDP_ADMIN_TOKEN, if set, takes precedence (externally-managed token).
+// See docs/AUTH-DESIGN.md.
 type idpClient struct {
 	baseURL string
-	token   string
 	http    *http.Client
+
+	// Admin OIDC token (password grant on the admin client).
+	tokenURL      string
+	adminClientID string
+	adminUsername string
+	adminPassword string
+	staticToken   string
+
+	mu       sync.Mutex
+	token    string
+	tokenExp time.Time
 }
 
 func newIDPClient(cfg Config) *idpClient {
+	tokenURL := cfg.IdPTokenURL
+	if tokenURL == "" && cfg.OIDCIssuer != "" {
+		tokenURL = cfg.OIDCIssuer + "/token"
+	}
 	return &idpClient{
-		baseURL: cfg.IdPAdminBaseURL,
-		token:   cfg.IdPAdminToken,
-		http:    &http.Client{Timeout: 15 * time.Second},
+		baseURL:       cfg.IdPAdminBaseURL,
+		http:          &http.Client{Timeout: 15 * time.Second},
+		tokenURL:      tokenURL,
+		adminClientID: cfg.IdPAdminClientID,
+		adminUsername: cfg.IdPAdminUsername,
+		adminPassword: cfg.IdPAdminPassword,
+		staticToken:   cfg.IdPAdminToken,
 	}
 }
 
-func (c *idpClient) configured() bool { return c.baseURL != "" }
+// configured reports whether the admin API can be called: a base URL plus either
+// a static token or admin credentials to mint one.
+func (c *idpClient) configured() bool {
+	if c.baseURL == "" {
+		return false
+	}
+	if c.staticToken != "" {
+		return true
+	}
+	return c.adminUsername != "" && c.adminPassword != "" && c.tokenURL != ""
+}
+
+// adminToken returns a valid admin bearer token, minting and caching one via the
+// password grant when needed. A static token, if configured, is used as-is.
+func (c *idpClient) adminToken(ctx context.Context) (string, error) {
+	if c.staticToken != "" {
+		return c.staticToken, nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.token != "" && time.Now().Before(c.tokenExp) {
+		return c.token, nil
+	}
+	form := url.Values{}
+	form.Set("grant_type", "password")
+	form.Set("client_id", c.adminClientID)
+	form.Set("username", c.adminUsername)
+	form.Set("password", c.adminPassword)
+	form.Set("scope", "openid")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("idp admin token: status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var tr struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(raw, &tr); err != nil {
+		return "", err
+	}
+	if tr.AccessToken == "" {
+		return "", errors.New("idp admin token: empty access_token")
+	}
+	ttl := tr.ExpiresIn
+	if ttl <= 0 {
+		ttl = 300
+	}
+	c.token = tr.AccessToken
+	// Refresh a little early to avoid using a token that expires mid-request.
+	c.tokenExp = time.Now().Add(time.Duration(ttl)*time.Second - 30*time.Second)
+	return c.token, nil
+}
 
 func (c *idpClient) do(ctx context.Context, method, path string, body any) (map[string]any, error) {
 	var reader io.Reader
@@ -52,8 +137,12 @@ func (c *idpClient) do(ctx context.Context, method, path string, body any) (map[
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
+	token, err := c.adminToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("idp admin auth: %w", err)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
