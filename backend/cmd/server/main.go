@@ -285,7 +285,9 @@ func loadConfig() Config {
 		CookieSecure: boolEnv("SESSION_COOKIE_SECURE", strings.HasPrefix(appBaseURL, "https://")),
 		SessionTTL:   secondsEnv("SESSION_TTL", 43200),
 
-		IdPAdminBaseURL:           strings.TrimRight(env("IDP_ADMIN_BASE_URL", env("OIDC_ISSUER", "")), "/"),
+		// Auténtico serves OIDC under /oauth2 but its admin API is at the root, so
+		// the admin base defaults to the issuer with a trailing /oauth2 stripped.
+		IdPAdminBaseURL:           strings.TrimRight(env("IDP_ADMIN_BASE_URL", strings.TrimSuffix(strings.TrimRight(env("OIDC_ISSUER", ""), "/"), "/oauth2")), "/"),
 		IdPAdminToken:             env("IDP_ADMIN_TOKEN", ""),
 		IdPSupportsUsernameRename: boolEnv("IDP_SUPPORTS_USERNAME_RENAME", false),
 

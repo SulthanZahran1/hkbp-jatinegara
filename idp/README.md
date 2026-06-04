@@ -41,17 +41,55 @@ cp .env.example .env   # fill in secrets
 docker compose up -d --build
 ```
 
-Key configuration (`.env`):
+Key configuration (`.env`, names from upstream `pkg/config`):
 
-- `AUTENTICO_APP_URL=https://auth.hkbp.zahranm.cloud` — must equal the HKBP
-  backend `OIDC_ISSUER`.
-- `AUTENTICO_PROFILE_FIELD_EMAIL=hidden` — enables no-personal-email
-  username/password users (confirmed in spike).
+- `AUTENTICO_APP_URL=https://auth.hkbp.zahranm.cloud` — Auténtico derives the
+  issuer as `<APP_URL>/oauth2`, so the HKBP backend `OIDC_ISSUER` must be
+  `https://auth.hkbp.zahranm.cloud/oauth2`.
+- `AUTENTICO_LISTEN_PORT=9999` — Traefik routes the host to this port.
 - `AUTENTICO_DB_FILE_PATH=/app/data/autentico.db` — SQLite on the `idp-data`
   volume.
-- HKBP OIDC client (`HKBP_OIDC_CLIENT_ID`/`_SECRET`/`_REDIRECT_URI`) — must match
-  the HKBP backend `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URL`.
-- `AUTENTICO_ADMIN_API_TOKEN` — the HKBP backend's `IDP_ADMIN_TOKEN`.
+- `AUTENTICO_ADMIN_USERNAME/_PASSWORD/_EMAIL` + `AUTENTICO_ENABLE_ADMIN_PASSWORD_GRANT=true`
+  — seed the admin account and the `autentico-admin` client used to mint admin
+  API tokens.
+
+## Register the HKBP client
+
+OIDC clients live in Auténtico's `clients` table (created via the admin API or
+the `autentico` CLI), not via env. After first boot, register the HKBP
+relying-party client so the values match the HKBP backend
+(`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URL`):
+
+- `client_id`: `hkbp-app`
+- `redirect_uris`: `https://hkbp.zahranm.cloud/api/v1/auth/callback`
+- `post_logout_redirect_uris`: `https://hkbp.zahranm.cloud/login?logged_out=1`
+- `grant_types`: `authorization_code`, `refresh_token`
+- a generated `client_secret` (confidential client)
+
+```bash
+# inside the IdP container (exact subcommand per the pinned autentico CLI)
+docker exec -it hkbp-idp autentico client create \
+  --client-id hkbp-app \
+  --redirect-uri https://hkbp.zahranm.cloud/api/v1/auth/callback \
+  --post-logout-redirect-uri 'https://hkbp.zahranm.cloud/login?logged_out=1' \
+  --grant-types authorization_code,refresh_token
+```
+
+## Integration status (HKBP backend ↔ Auténtico)
+
+**Works once the IdP + client are deployed (Stage A):** the full browser login
+flow (authorize → callback → cookie session), access requests for self-signup
+identities, admin approval, and logout. No admin token needed for this path.
+
+**Needs follow-up (Stage B):** Auténtico's admin API (`POST /admin/api/users`,
+`/setup-password-link`, client/username management) is protected by an **admin
+OIDC access token** (audience `autentico-admin`), not a static bearer token. The
+HKBP `idpClient` currently sends a static `IDP_ADMIN_TOKEN`, so HKBP-initiated
+**provisioning / setup-link / rename** will not authenticate until the client is
+extended to mint an admin token via the `autentico-admin` client
+(client-credentials or password grant, with `AUTENTICO_ENABLE_ADMIN_PASSWORD_GRANT=true`)
+and cache/refresh it. Until then, onboard users via Auténtico self-signup +
+HKBP access-request approval.
 
 ## Backup & restore
 

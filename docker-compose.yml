@@ -11,7 +11,7 @@ services:
       PORT: 8080
       SQLITE_PATH: /app/data/hkbp_jatinegara.db
       APP_BASE_URL: https://hkbp.zahranm.cloud
-      OIDC_ISSUER: https://auth.hkbp.zahranm.cloud
+      OIDC_ISSUER: https://auth.hkbp.zahranm.cloud/oauth2
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-hkbp-app}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       IDP_ADMIN_BASE_URL: https://auth.hkbp.zahranm.cloud

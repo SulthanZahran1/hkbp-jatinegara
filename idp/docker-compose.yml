@@ -21,14 +21,14 @@ services:
     environment:
       # SQLite state on the persistent volume.
       AUTENTICO_DB_FILE_PATH: /app/data/autentico.db
-      # No-personal-email username/password users.
-      AUTENTICO_PROFILE_FIELD_EMAIL: hidden
     volumes:
       - idp-data:/app/data
     networks:
       - web
+    # Auténtico listens on 9999; Traefik (Dokploy) routes auth.hkbp.zahranm.cloud
+    # to this port.
     expose:
-      - "8080"
+      - "9999"
 
   # Nightly SQLite backup with retention (target 7-30 days). Uses the same
   # volume read-only and writes timestamped copies to idp-backups.
