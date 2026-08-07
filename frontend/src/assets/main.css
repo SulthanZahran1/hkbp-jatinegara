@@ -14,7 +14,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 button,
@@ -32,7 +32,7 @@ a {
 .app-shell {
   display: grid;
   grid-template-columns: 248px 1fr;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .sidebar {
@@ -79,7 +79,7 @@ a {
   color: #43515e;
   display: block;
   font-weight: 600;
-  padding: 10px 12px;
+  padding: 12px;
 }
 
 .sidebar nav a.router-link-active {
@@ -156,7 +156,7 @@ a {
 .stat {
   background: #ffffff;
   border: 1px solid #dfe5ea;
-  border-left: 4px solid #2563eb;
+  border-left: 4px solid #0f766e;
   border-radius: 8px;
   padding: 16px;
 }
@@ -186,7 +186,7 @@ textarea {
   border: 1px solid #cbd5dd;
   border-radius: 8px;
   color: #17202a;
-  min-height: 40px;
+  min-height: 44px;
   padding: 9px 10px;
   width: 100%;
 }
@@ -207,7 +207,7 @@ textarea {
   font-weight: 700;
   gap: 8px;
   justify-content: center;
-  min-height: 40px;
+  min-height: 44px;
   padding: 9px 14px;
 }
 
@@ -277,7 +277,7 @@ th {
   align-items: center;
   background: linear-gradient(135deg, #f4f6f8 0%, #e9f4f2 42%, #f8fbff 100%);
   display: grid;
-  min-height: 100vh;
+  min-height: 100dvh;
   padding: 24px;
 }
 
