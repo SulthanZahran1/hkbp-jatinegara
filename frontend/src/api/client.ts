@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Same-origin in production (the Go server serves the built SPA), proxied to the
 // backend in dev. Auth is the HTTP-only hkbp_session cookie, so every request
-// must send credentials — there are no Bearer tokens anymore.
+// must send credentials. There are no Bearer tokens anymore.
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
 const client = axios.create({

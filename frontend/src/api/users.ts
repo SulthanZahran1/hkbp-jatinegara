@@ -19,7 +19,7 @@ export interface ProvisionResult {
   expires_at?: string;
 }
 
-// Editable profile/authorization fields only — username is an IdP-coordinated
+// Editable profile/authorization fields only. Username is an IdP-coordinated
 // rename and credentials live in the IdP.
 export interface UserUpdatePayload {
   email?: string | null;
